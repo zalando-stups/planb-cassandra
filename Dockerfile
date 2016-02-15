@@ -17,9 +17,13 @@ RUN apt-get -y install cassandra=$CASSIE_VERSION cassandra-tools=$CASSIE_VERSION
 RUN mkdir -p /opt/jolokia/
 
 ADD http://search.maven.org/remotecontent?filepath=org/jolokia/jolokia-jvm/1.3.2/jolokia-jvm-1.3.2-agent.jar /opt/jolokia/jolokia-jvm-agent.jar
+RUN chmod 744 /opt/jolokia/jolokia-jvm-agent.jar
 RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" > /tmp/jolokia-jvm-agent.jar.md5
 RUN md5sum --check /tmp/jolokia-jvm-agent.jar.md5
 RUN rm -f /tmp/jolokia-jvm-agent.jar.md5
+
+RUN chmod -R 777 /var/lib/cassandra
+RUN chmod -R 777 /var/log/cassandra
 
 ADD cassandra_template.yaml /etc/cassandra/
 # Slightly modified in order to run jolokia
