@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import itertools
 import time
 import base64
 import boto3
@@ -33,9 +34,10 @@ def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> 
             ec2.create_tags(Resources=[sg['GroupId']],
                             Tags=[{'Key': 'Name', 'Value': sg_name}])
             ip_permissions = []
-            for ip in ips:
+            # NOTE: we need to allow ALL public IPs (from all regions)
+            for ip in itertools.chain(*public_ips.values()):
                 ip_permissions.append({'IpProtocol': 'tcp',
-                                       'FromPort': 7001, # port range: From-To
+                                       'FromPort': 7001,  # port range: From-To
                                        'ToPort': 7001,
                                        'IpRanges': [{'CidrIp': '{}/32'.format(ip['PublicIp'])}]})
             ip_permissions.append({'IpProtocol': '-1',
@@ -98,7 +100,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, tr
 
 
 def generate_certificate(cluster_name: str):
-    check = call(["which" , "keytool"])
+    check = call(["which", "keytool"])
     if check:
         print("Keytool is not in searchpath")
         return
@@ -140,6 +142,7 @@ def generate_certificate(cluster_name: str):
         pass
     return keystore_data, truststore_data
 
+
 def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
     # reservice Elastic IPs
     for region in regions:
@@ -154,7 +157,7 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                     ami: str, user_data: str, subnet_id: str, security_group_id: str):
 
-    with Action('Launching node {} in {}..'.format(ip['PublicIp']), region) as act:
+    with Action('Launching node {} in {}..'.format(ip['PublicIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         # start seed node in first AZ
@@ -216,7 +219,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
 
         # take first IP in every region as seed node
         # TODO: support more than one seed node per region for larger clusters
-        seed_nodes = { region: ips[0] for region, ips in public_ips.items() }
+        seed_nodes = {region: ips[0] for region, ips in public_ips.items()}
         seed_node_ips = list([ip['PublicIp'] for ip in seed_nodes.values()])
         info('Our seed nodes are: {}'.format(', '.join(seed_node_ips)))
 
