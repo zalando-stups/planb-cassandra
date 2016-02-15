@@ -32,12 +32,24 @@ fi
 export DATA_DIR=${DATA_DIR:-/var/lib/cassandra}
 export COMMIT_LOG_DIR=${COMMIT_LOG_DIR:-/var/lib/cassandra/commit_logs}
 
+if [ -z "$TRUSTSTORE" ]; then
+    echo "TRUSTSTORE must be set (base64 encoded)."
+    exit 1
+fi
+
+if [ -z "$KEYSTORE" ]; then
+    echo "KEYSTORE must be set (base64 encoded)."
+    exit 1
+fi
+
+echo $TRUSTSTORE | base64 -d > /etc/cassandra/truststore
+echo $KEYSTORE | base64 -d > /etc/cassandra/keystore
+
 echo "Finished bootstrapping node."
 # Add route 53record seed1.${CLUSTER_NAME}.domain.tld ?
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
-
 
 echo "Starting Cassandra ..."
 /usr/sbin/cassandra -f

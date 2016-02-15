@@ -69,6 +69,8 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
     '''
+    keystore_base64 = ''
+    truststore_base64 = ''
     version = get_latest_docker_image_version()
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
@@ -79,6 +81,8 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
             'environment': {
                 'CLUSTER_NAME': cluster_name,
                 'SEEDS': ','.join(seed_nodes),
+                'KEYSTORE': keystore_base64,
+                'TRUSTSTORE': truststore_base64,
                 }
             }
     # TODO: add KMS-encrypted keystore/truststore
@@ -191,6 +195,6 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
                 ec2.release_address(AllocationId=ip['AllocationId'])
 
         raise
-    
+
 if __name__ == '__main__':
     cli()
