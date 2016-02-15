@@ -56,6 +56,28 @@ To watch the cluster's node status (e.g. joining during initial bootstrap):
     $ # on Taupage instance
     $ watch docker exec -it taupageapp nodetool status
 
+The output should look something like this (freshly bootstrapped cluster):
+
+::
+
+    Datacenter: eu-central
+    ======================
+    Status=Up/Down
+    |/ State=Normal/Leaving/Joining/Moving
+    --  Address        Load       Tokens  Owns (effective)  Host ID                               Rack
+    UN  52.29.137.93   66.59 KB   256     34.8%             62f50c2c-cb0f-4f62-a518-aa7b1fd04377  1a
+    UN  52.28.11.187   66.43 KB   256     31.1%             69d698a9-7357-46b2-93b8-6c038155f0c1  1b
+    UN  52.29.41.128   71.79 KB   256     35.0%             b76e7ed7-78de-4bbc-9742-13adbbcfd438  1a
+    Datacenter: eu-west
+    ===================
+    Status=Up/Down
+    |/ State=Normal/Leaving/Joining/Moving
+    --  Address        Load       Tokens  Owns (effective)  Host ID                               Rack
+    UN  52.49.209.129  91.29 KB   256     34.8%             140bc7de-9973-46fd-af8c-68148bf20524  1b
+    UN  52.49.192.149  81.16 KB   256     32.1%             cb45fc4c-291d-4b2b-b50f-3a11048f0211  1c
+    UN  52.49.128.58   81.22 KB   256     32.1%             8a270de3-b419-4baf-8449-f4bc65c51d0d  1a
+
+
 .. _STUPS: https://stups.io/
 .. _Taupage: http://docs.stups.io/en/latest/components/taupage.html
 .. _Ec2MultiRegionSnitch: http://docs.datastax.com/en/cassandra/2.1/cassandra/architecture/architectureSnitchEC2MultiRegion_c.html
