@@ -733,11 +733,11 @@ request_scheduler: org.apache.cassandra.scheduler.NoScheduler
 # http://download.oracle.com/javase/6/docs/technotes/guides/security/jsse/JSSERefGuide.html#CreateKeystore
 #
 server_encryption_options:
-    internode_encryption: none
-    keystore: conf/.keystore
-    keystore_password: cassandra
-    truststore: conf/.truststore
-    truststore_password: cassandra
+    internode_encryption: all
+    keystore: /etc/cassandra/keystore
+    keystore_password: $CLUSTER_NAME
+    truststore: /etc/cassandra/truststore
+    truststore_password: $CLUSTER_NAME
     # More advanced defaults below:
     # protocol: TLS
     # algorithm: SunX509
