@@ -160,11 +160,18 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
     with Action('Launching node {} in {}..'.format(ip['PublicIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
+        # make sure our root EBS volume is persisted
+        # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/RootDeviceStorage.html#Using_RootDeviceStorage
+        block_devices = [{'DeviceName': '/dev/sda1',
+                          'Ebs': {
+                              'DeleteOnTermination': False
+                              }}]
+
         # start seed node in first AZ
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                 SecurityGroupIds=[security_group_id],
                 UserData=user_data, InstanceType=instance_type,
-                SubnetId=subnet_id)
+                SubnetId=subnet_id, BlockDeviceMappings=block_devices)
 
         instance_id = resp['Instances'][0]['InstanceId']
 
