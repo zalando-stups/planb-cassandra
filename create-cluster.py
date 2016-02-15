@@ -102,7 +102,7 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 def launch_instance(region: str, ip: str, instance_type: str, ami: str, user_data: str,
                     security_group_id: str):
 
-    with Action('Launching node {}..'.format(ip)):
+    with Action('Launching node {}..'.format(ip['PublicIp'])) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         resp = ec2.describe_subnets()
@@ -110,10 +110,21 @@ def launch_instance(region: str, ip: str, instance_type: str, ami: str, user_dat
         subnets = list([subnet['SubnetId'] for subnet in sorted(resp['Subnets'], key=lambda subnet: subnet['AvailabilityZone'])])
 
         # start seed node in first AZ
-        ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
+        resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                 SecurityGroupIds=[security_group_id],
                 UserData=user_data, InstanceType=instance_type,
                 SubnetId=subnets[0])
+
+        # wait for instance to initialize before we can assign an IP address to it
+        instance_id = resp['Instances'][0]['InstanceId']
+        while True:
+            resp = ec2.describe_instances(InstanceIds=[instance_id])
+            if resp['Reservations'][0]['Instances'][0]['State']['Name'] != 'pending':
+                break
+            time.sleep(5)
+            act.progress()
+
+        ec2.associate_address(InstanceId=instance_id, AllocationId=ip['AllocationId'])
 
 
 @click.command()
@@ -135,14 +146,15 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
 
         # take first IP in every region as seed node
         # TODO: support more than one seed node per region for larger clusters
-        seed_nodes = { region: ips[0]['PublicIp'] for region, ips in public_ips.items() }
-        info('Our seed nodes are: {}'.format(', '.join(seed_nodes.values())))
+        seed_nodes = { region: ips[0] for region, ips in public_ips.items() }
+        seed_node_ips = list([ip['PublicIp'] for ip in seed_nodes.values()])
+        info('Our seed nodes are: {}'.format(', '.join(seed_node_ips)))
 
         # Set up Security Groups
         setup_security_groups(cluster_name, public_ips, security_groups)
 
         taupage_amis = find_taupage_amis(regions)
-        user_data = generate_taupage_user_data(cluster_name, seed_nodes)
+        user_data = generate_taupage_user_data(cluster_name, seed_node_ips)
 
         # Launch EC2 instances with correct user data
         # Launch sequence:
@@ -158,10 +170,11 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         # TODO: parallelize by region?
         for region, ips in public_ips.items():
             for ip in ips:
-                if ip['PublicIp'] not in seed_nodes[region]:
+                if ip['PublicIp'] not in seed_node_ips:
                     # avoid stating all nodes at the same time
+                    info("Sleeping for 30s before launching next instance..")
                     time.sleep(30)
-                    launch_instance(region, ip['PublicIp'], instance_type=instance_type,
+                    launch_instance(region, ip, instance_type=instance_type,
                                     ami=taupage_amis[region], user_data=user_data,
                                     security_group_id=security_groups[region]['GroupId'])
 
