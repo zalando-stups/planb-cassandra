@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import time
+import base64
 import boto3
 import click
 import collections
@@ -67,13 +68,13 @@ def get_latest_docker_image_version():
     return requests.get('https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags').json()[-1]['name']
 
 
-def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
+def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, truststore):
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
     '''
-    keystore_base64 = ''
-    truststore_base64 = ''
+    keystore_base64 = base64.b64encode(keystore)
+    truststore_base64 = base64.b64encode(truststore)
     version = get_latest_docker_image_version()
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
@@ -92,6 +93,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
 
     serialized = yaml.safe_dump(data)
     user_data = '#taupage-ami-config\n{}'.format(serialized)
+    print(user_data)
     return user_data
 
 def generate_certificate(cluster_name: str):
@@ -128,14 +130,14 @@ def generate_certificate(cluster_name: str):
                      "-storepass", cluster_name]
         check_call(importcmd)
 
-        with open(keystore) as fd:
-            keystore_data = keystore.read()
-        with open(truststore) as fd:
-            truststore_data = truststore.read()
+        with open(keystore, 'rb') as fd:
+            keystore_data = fd.read()
+        with open(truststore, 'rb') as fd:
+            truststore_data = fd.read()
     finally:
         pass
     return keystore_data, truststore_data
-                
+
 
 def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
     # reservice Elastic IPs
@@ -186,6 +188,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         raise click.UsageError('Please specify at least one region')
 
     # generate keystore/truststore
+    keystore, truststore = generate_certificate(cluster_name)
 
     # Elastic IPs by region
     public_ips = collections.defaultdict(list)
@@ -203,7 +206,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         setup_security_groups(cluster_name, public_ips, security_groups)
 
         taupage_amis = find_taupage_amis(regions)
-        user_data = generate_taupage_user_data(cluster_name, seed_node_ips)
+        user_data = generate_taupage_user_data(cluster_name, seed_node_ips, keystore, truststore)
 
         # Launch EC2 instances with correct user data
         # Launch sequence:
@@ -242,4 +245,4 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         raise
 
 if __name__ == '__main__':
-    generate_certificate("password")
+    cli()
