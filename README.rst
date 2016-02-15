@@ -23,6 +23,12 @@ Non-Features:
 Usage
 =====
 
+Prerequisites:
+
+* Python 3.4+
+* Python dependencies (``sudo pip3 install -r requirements.txt``)
+* Java 8 with ``keytool`` in your ``PATH`` (required to generate SSL certs)
+
 To create a cluster named "mycluster" in two regions with 3 nodes per region (default size):
 
 .. code-block:: bash
