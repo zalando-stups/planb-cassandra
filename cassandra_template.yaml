@@ -422,7 +422,7 @@ rpc_port: 9160
 # be set.
 # cassandra-docker note: Cassandra <= 2.1.4 will NPE with rpc_interface
 # see: https://issues.apache.org/jira/browse/CASSANDRA-8925
-# broadcast_rpc_address: $LISTEN_ADDRESS
+broadcast_rpc_address: $BROADCAST_ADDRESS
 
 # enable or disable keepalive on rpc/native connections
 rpc_keepalive: true
