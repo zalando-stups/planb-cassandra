@@ -152,20 +152,16 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 
 
 def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
-                    ami: str, user_data: str, security_group_id: str):
+                    ami: str, user_data: str, subnet_id: str, security_group_id: str):
 
     with Action('Launching node {} in {}..'.format(ip['PublicIp']), region) as act:
         ec2 = boto3.client('ec2', region_name=region)
-
-        resp = ec2.describe_subnets()
-        # subnet IDs sorted by AZ
-        subnets = list([subnet['SubnetId'] for subnet in sorted(resp['Subnets'], key=lambda subnet: subnet['AvailabilityZone'])])
 
         # start seed node in first AZ
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                 SecurityGroupIds=[security_group_id],
                 UserData=user_data, InstanceType=instance_type,
-                SubnetId=subnets[0])
+                SubnetId=subnets_id)
 
         instance_id = resp['Instances'][0]['InstanceId']
 
@@ -181,6 +177,23 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
             act.progress()
 
         ec2.associate_address(InstanceId=instance_id, AllocationId=ip['AllocationId'])
+
+
+def get_dmz_subnets(regions: list) -> dict:
+    '''
+    Returns a dict of lists of DMZ subnets sorted by AZ.
+    '''
+    subnets = collections.defaultdict(list)
+    for region in regions:
+        ec2 = boto3.client('ec2', region)
+        resp = ec2.describe_subnets()
+
+        for subnet in sorted(resp['Subnets'], key=lambda subnet: subnet['AvailabilityZone']):
+            for tag in subnet['Tags']:
+                if tag['Key'] == 'Name':
+                    if tag['Value'].startswith('dmz-'):
+                        subnets['region'].append(subnet['SubnetId'])
+    return subnets
 
 
 @click.command()
@@ -214,11 +227,14 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         user_data = generate_taupage_user_data(cluster_name, seed_node_ips, keystore, truststore)
 
         # Launch EC2 instances with correct user data
+        subnets = get_dmz_subnets(regions)
+
         # Launch sequence:
         # start seed nodes (e.g. 1 per region if cluster_size == 3)
         for region, ip in seed_nodes.items():
             launch_instance(cluster_name, region, ip, instance_type=instance_type,
                             ami=taupage_amis[region], user_data=user_data,
+                            subnet_id=subnets[region][0],  # put seed node in the 1st AZ
                             security_group_id=security_groups[region]['GroupId'])
 
         # TODO: make sure all seed nodes are up
@@ -226,13 +242,20 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         # add remaining nodes one by one
         # TODO: parallelize by region?
         for region, ips in public_ips.items():
-            for ip in ips:
+            region_subnets = subnets[region]
+            for i, ip in enumerate(ips):
+                #
+                # We start enumerating with 0, but skip we will also
+                # the seed, so the first non-seed should land in the
+                # 2nd AZ.
+                #
                 if ip['PublicIp'] not in seed_node_ips:
                     # avoid stating all nodes at the same time
                     info("Sleeping for 30s before launching next instance..")
                     time.sleep(30)
                     launch_instance(cluster_name, region, ip, instance_type=instance_type,
                                     ami=taupage_amis[region], user_data=user_data,
+                                    subnet_id=region_subnets[i % len(region_subnets)],
                                     security_group_id=security_groups[region]['GroupId'])
 
     except:
