@@ -94,8 +94,8 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, tr
 
     serialized = yaml.safe_dump(data)
     user_data = '#taupage-ami-config\n{}'.format(serialized)
-    print(user_data)
     return user_data
+
 
 def generate_certificate(cluster_name: str):
     check = call(["which" , "keytool"])
@@ -154,7 +154,7 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 def launch_instance(region: str, ip: str, instance_type: str, ami: str, user_data: str,
                     security_group_id: str):
 
-    with Action('Launching node {}..'.format(ip['PublicIp'])) as act:
+    with Action('Launching node {} in {}..'.format(ip['PublicIp']), region) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         resp = ec2.describe_subnets()
