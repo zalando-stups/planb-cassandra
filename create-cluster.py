@@ -6,6 +6,9 @@ import collections
 import yaml
 import requests
 from clickclick import Action, info
+from subprocess import check_call, call
+import tempfile
+import os
 
 
 def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> dict:
@@ -90,6 +93,48 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
     user_data = '#taupage-ami-config\n{}'.format(serialized)
     return user_data
 
+def generate_certificate(cluster_name: str):
+    check = call(["which" , "keytool"])
+    if check:
+        print("Keytool is not in searchpath")
+        return
+
+    d = tempfile.mkdtemp()
+    try:
+        keystore = os.path.join(d, 'keystore')
+        cmd = ["keytool", "-genkeypair",
+               "-alias", "planb",
+               "-keyalg", "RSA",
+               "-validity", "36000",
+               "-keystore", keystore,
+               "-dname", "c=DE, st=Berlin, l=Berlin, o=Zalando SE, cn=zalando.net",
+               "-storepass", cluster_name,
+               "-keypass", cluster_name]
+        check_call(cmd)
+        cert = os.path.join(d, 'cert')
+        export = ["keytool", "-export",
+                  "-alias", "planb",
+                  "-keystore", keystore,
+                  "-rfc",
+                  "-file", cert,
+                  "-storepass", cluster_name]
+        check_call(export)
+        truststore = os.path.join(d, 'truststore')
+        importcmd = ["keytool", "-import",
+                     "-alias", "planb",
+                     "-file", cert,
+                     "-keystore", truststore,
+                     "-storepass", cluster_name]
+        check_call(importcmd)
+
+        with open(keystore) as fd:
+            keystore_data = keystore.read()
+        with open(truststore) as fd:
+            truststore_data = truststore.read()
+    finally:
+        pass
+    return keystore_data, truststore_data
+                
 
 def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
     # reservice Elastic IPs
@@ -173,4 +218,4 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         raise
 
 if __name__ == '__main__':
-    cli()
+    generate_certificate("password")
