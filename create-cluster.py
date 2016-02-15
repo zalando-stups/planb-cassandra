@@ -124,6 +124,7 @@ def generate_certificate(cluster_name: str):
         check_call(export)
         truststore = os.path.join(d, 'truststore')
         importcmd = ["keytool", "-import",
+                     "-noprompt",
                      "-alias", "planb",
                      "-file", cert,
                      "-keystore", truststore,
@@ -137,7 +138,6 @@ def generate_certificate(cluster_name: str):
     finally:
         pass
     return keystore_data, truststore_data
-
 
 def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
     # reservice Elastic IPs
