@@ -4,6 +4,7 @@ import boto3
 import click
 import collections
 import yaml
+import requests
 from clickclick import Action, info
 
 
@@ -58,13 +59,18 @@ def find_taupage_amis(regions: list) -> dict:
     return result
 
 
+def get_latest_docker_image_version():
+    return requests.get('https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags').json()[-1]['name']
+
+
 def generate_taupage_user_data(cluster_name: str, seed_nodes: list):
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
     '''
+    version = get_latest_docker_image_version()
     data = {'runtime': 'Docker',
-            'source': 'registry.opensource.zalan.do/stups/planb-cassandra:cd1',
+            'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
             'application_id': cluster_name,
             'application_version': '1.0',
             'ports': {'7001': '7001',
