@@ -164,7 +164,7 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                 SecurityGroupIds=[security_group_id],
                 UserData=user_data, InstanceType=instance_type,
-                SubnetId=subnets_id)
+                SubnetId=subnet_id)
 
         instance_id = resp['Instances'][0]['InstanceId']
 
