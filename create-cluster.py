@@ -188,6 +188,22 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
 
         ec2.associate_address(InstanceId=instance_id, AllocationId=ip['AllocationId'])
 
+        # add an auto-recovery alarm for this instance
+        cw = boto3.client('cloudwatch', region_name=region)
+        cw.put_metric_alarm(AlarmName='{}-auto-recover'.format(instance_id),
+                            AlarmActions=['arn:aws:automate:eu-west-1:ec2:recover'],
+                            MetricName='StatusCheckFailed_System',
+                            Namespace='AWS/EC2',
+                            Statistic='Minimum',
+                            Dimensions=[{
+                                'Name': 'InstanceId',
+                                'Value': instance_id
+                            }],
+                            Period=60, # 1 minute
+                            EvaluationPeriods=2,
+                            Threshold=0,
+                            ComparisonOperator='GreaterThanThreshold')
+
 
 def get_dmz_subnets(regions: list) -> dict:
     '''
