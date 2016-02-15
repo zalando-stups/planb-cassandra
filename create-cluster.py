@@ -70,7 +70,7 @@ def get_latest_docker_image_version():
     return requests.get('https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags').json()[-1]['name']
 
 
-def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, truststore):
+def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, truststore):
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
@@ -78,6 +78,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, tr
     keystore_base64 = base64.b64encode(keystore)
     truststore_base64 = base64.b64encode(truststore)
     version = get_latest_docker_image_version()
+    all_seeds = [ip['PublicIp'] for region, ips in seed_nodes.items() for ip in ips]
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
             'application_id': cluster_name,
@@ -87,7 +88,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, tr
                 '9042': '9042'},
             'environment': {
                 'CLUSTER_NAME': cluster_name,
-                'SEEDS': ','.join(seed_nodes),
+                'SEEDS': ','.join(all_seeds),
                 'KEYSTORE': keystore_base64,
                 'TRUSTSTORE': truststore_base64,
                 }
@@ -155,9 +156,10 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 
 
 def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
-                    ami: str, user_data: str, subnet_id: str, security_group_id: str):
+                    ami: str, user_data: str, subnet_id: str, security_group_id: str,
+                    node_type: str):
 
-    with Action('Launching node {} in {}..'.format(ip['PublicIp'], region)) as act:
+    with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         # make sure our root EBS volume is persisted
@@ -167,7 +169,6 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                               'DeleteOnTermination': False
                               }}]
 
-        # start seed node in first AZ
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                 SecurityGroupIds=[security_group_id],
                 UserData=user_data, InstanceType=instance_type,
@@ -240,28 +241,38 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
     try:
         allocate_public_ips(regions, cluster_size, public_ips)
 
-        # take first IP in every region as seed node
-        # TODO: support more than one seed node per region for larger clusters
-        seed_nodes = {region: ips[0] for region, ips in public_ips.items()}
-        seed_node_ips = list([ip['PublicIp'] for ip in seed_nodes.values()])
-        info('Our seed nodes are: {}'.format(', '.join(seed_node_ips)))
+        # We should have up to 3 seeds nodes per DC
+        seed_count = min(cluster_size, 3)
+
+        # take first {seed_count} IPs in every region for the seed nodes
+        seed_nodes = {}
+        for region, ips in public_ips.items():
+            seed_nodes[region] = ips[0:seed_count]
+            list_ips = [ip['PublicIp'] for ip in seed_nodes[region]]
+            info('Our seed nodes in {} are: {}'.format(region, ', '.join(list_ips)))
 
         # Set up Security Groups
         setup_security_groups(cluster_name, public_ips, security_groups)
 
         taupage_amis = find_taupage_amis(regions)
-        user_data = generate_taupage_user_data(cluster_name, seed_node_ips, keystore, truststore)
+        user_data = generate_taupage_user_data(cluster_name, seed_nodes, keystore, truststore)
 
         # Launch EC2 instances with correct user data
         subnets = get_dmz_subnets(regions)
 
         # Launch sequence:
-        # start seed nodes (e.g. 1 per region if cluster_size == 3)
-        for region, ip in seed_nodes.items():
-            launch_instance(cluster_name, region, ip, instance_type=instance_type,
-                            ami=taupage_amis[region], user_data=user_data,
-                            subnet_id=subnets[region][0],  # put seed node in the 1st AZ
-                            security_group_id=security_groups[region]['GroupId'])
+        # start all the seed nodes
+        for region, ips in seed_nodes.items():
+            region_subnets = subnets[region]
+            for i, ip in enumerate(ips):
+                launch_instance(cluster_name, region, ip, instance_type=instance_type,
+                                ami=taupage_amis[region], user_data=user_data,
+                                subnet_id=region_subnets[i % len(region_subnets)],
+                                security_group_id=security_groups[region]['GroupId'],
+                                node_type='SEED')
+                if i + 1 < seed_count:
+                    info("Sleeping for 30s before launching next SEED node..")
+                    time.sleep(30)
 
         # TODO: make sure all seed nodes are up
 
@@ -270,19 +281,15 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         for region, ips in public_ips.items():
             region_subnets = subnets[region]
             for i, ip in enumerate(ips):
-                #
-                # We start enumerating with 0, but skip we will also
-                # the seed, so the first non-seed should land in the
-                # 2nd AZ.
-                #
-                if ip['PublicIp'] not in seed_node_ips:
+                if i >= seed_count:
                     # avoid stating all nodes at the same time
-                    info("Sleeping for 30s before launching next instance..")
+                    info("Sleeping for 30s before launching next node..")
                     time.sleep(30)
                     launch_instance(cluster_name, region, ip, instance_type=instance_type,
                                     ami=taupage_amis[region], user_data=user_data,
                                     subnet_id=region_subnets[i % len(region_subnets)],
-                                    security_group_id=security_groups[region]['GroupId'])
+                                    security_group_id=security_groups[region]['GroupId'],
+                                    node_type='NORMAL')
 
     except:
         for region, sg in security_groups.items():
