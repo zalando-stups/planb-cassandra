@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import itertools
 import time
 import base64
 import boto3
@@ -33,7 +34,8 @@ def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> 
             ec2.create_tags(Resources=[sg['GroupId']],
                             Tags=[{'Key': 'Name', 'Value': sg_name}])
             ip_permissions = []
-            for ip in ips:
+            # NOTE: we need to allow ALL public IPs (from all regions)
+            for ip in itertools.chain(*public_ips.values()):
                 ip_permissions.append({'IpProtocol': 'tcp',
                                        'FromPort': 7001, # port range: From-To
                                        'ToPort': 7001,
