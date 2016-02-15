@@ -80,6 +80,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: list, keystore, tr
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
             'application_id': cluster_name,
             'application_version': '1.0',
+            'networking': 'host',
             'ports': {'7001': '7001',
                 '9042': '9042'},
             'environment': {
