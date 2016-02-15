@@ -30,9 +30,19 @@ To create a cluster named "mycluster" in two regions with 3 nodes per region (de
     $ mai login  # get temporary AWS credentials
     $ ./create-cluster.py mycluster eu-west-1 eu-central-1
 
+You can use `Più`_ to get SSH access and create your first schema:
+
+.. code-block:: bash
+
+    $ piu 172.31.1.1 "initial Cassandra setup"  # replace private IP
+    $ docker exec -it taupageapp cqlsh
+    cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
+
 
 Troubleshooting
 ===============
+
+To watch the cluster's node status (e.g. joining during initial bootstrap):
 
 .. code-block:: bash
 
@@ -45,3 +55,4 @@ Troubleshooting
 .. _EC2 Auto Recovery: https://aws.amazon.com/blogs/aws/new-auto-recovery-for-amazon-ec2/
 .. _Jolokia: https://jolokia.org/
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
+.. _Più: http://docs.stups.io/en/latest/components/piu.html
