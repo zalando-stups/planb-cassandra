@@ -195,7 +195,7 @@ def get_dmz_subnets(regions: list) -> dict:
             for tag in subnet['Tags']:
                 if tag['Key'] == 'Name':
                     if tag['Value'].startswith('dmz-'):
-                        subnets['region'].append(subnet['SubnetId'])
+                        subnets[region].append(subnet['SubnetId'])
     return subnets
 
 
