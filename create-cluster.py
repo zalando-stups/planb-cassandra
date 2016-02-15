@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 import boto3
 import click
 import collections
@@ -151,8 +152,18 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
                             ami=taupage_amis[region], user_data=user_data,
                             security_group_id=security_groups[region]['GroupId'])
 
-        # make sure all seed nodes are up
+        # TODO: make sure all seed nodes are up
+
         # add remaining nodes one by one
+        # TODO: parallelize by region?
+        for region, ips in public_ips.items():
+            for ip in ips:
+                if ip['PublicIp'] not in seed_nodes[region]:
+                    # avoid stating all nodes at the same time
+                    time.sleep(30)
+                    launch_instance(region, ip['PublicIp'], instance_type=instance_type,
+                                    ami=taupage_amis[region], user_data=user_data,
+                                    security_group_id=security_groups[region]['GroupId'])
 
     except:
         for region, sg in security_groups.items():
