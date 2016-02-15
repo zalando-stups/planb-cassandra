@@ -151,8 +151,8 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
                 act.progress()
 
 
-def launch_instance(region: str, ip: str, instance_type: str, ami: str, user_data: str,
-                    security_group_id: str):
+def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
+                    ami: str, user_data: str, security_group_id: str):
 
     with Action('Launching node {}..'.format(ip['PublicIp'])) as act:
         ec2 = boto3.client('ec2', region_name=region)
@@ -167,8 +167,12 @@ def launch_instance(region: str, ip: str, instance_type: str, ami: str, user_dat
                 UserData=user_data, InstanceType=instance_type,
                 SubnetId=subnets[0])
 
-        # wait for instance to initialize before we can assign an IP address to it
         instance_id = resp['Instances'][0]['InstanceId']
+
+        ec2.create_tags(Resources=[instance_id],
+                        Tags=[{'Key': 'Name', 'Value': cluster_name}])
+
+        # wait for instance to initialize before we can assign an IP address to it
         while True:
             resp = ec2.describe_instances(InstanceIds=[instance_id])
             if resp['Reservations'][0]['Instances'][0]['State']['Name'] != 'pending':
@@ -213,7 +217,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
         # Launch sequence:
         # start seed nodes (e.g. 1 per region if cluster_size == 3)
         for region, ip in seed_nodes.items():
-            launch_instance(region, ip, instance_type=instance_type,
+            launch_instance(cluster_name, region, ip, instance_type=instance_type,
                             ami=taupage_amis[region], user_data=user_data,
                             security_group_id=security_groups[region]['GroupId'])
 
@@ -227,7 +231,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
                     # avoid stating all nodes at the same time
                     info("Sleeping for 30s before launching next instance..")
                     time.sleep(30)
-                    launch_instance(region, ip, instance_type=instance_type,
+                    launch_instance(cluster_name, region, ip, instance_type=instance_type,
                                     ami=taupage_amis[region], user_data=user_data,
                                     security_group_id=security_groups[region]['GroupId'])
 
