@@ -27,8 +27,9 @@ def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> 
             # TODO: support more than one VPC..
             vpc_id = resp['Vpcs'][0]['VpcId']
             sg_name = cluster_name
-            sg = ec2.create_security_group(GroupName=sg_name, VpcId=vpc_id,
-                    Description='Allow cassandra nodes to talk via port 7001')
+            sg = ec2.create_security_group(GroupName=sg_name,
+                                           VpcId=vpc_id,
+                                           Description='Allow cassandra nodes to talk via port 7001')
             result[region] = sg
 
             ec2.create_tags(Resources=[sg['GroupId']],
@@ -55,9 +56,9 @@ def find_taupage_amis(regions: list) -> dict:
         with Action('Finding latest Taupage AMI in {}..'.format(region)):
             ec2 = boto3.resource('ec2', region)
             filters = [{'Name': 'name', 'Values': ['*Taupage-AMI-*']},
-                    {'Name': 'is-public', 'Values': ['false']},
-                    {'Name': 'state', 'Values': ['available']},
-                    {'Name': 'root-device-type', 'Values': ['ebs']}]
+                       {'Name': 'is-public', 'Values': ['false']},
+                       {'Name': 'state', 'Values': ['available']},
+                       {'Name': 'root-device-type', 'Values': ['ebs']}]
             images = list(ec2.images.filter(Filters=filters))
             if not images:
                 raise Exception('No Taupage AMI found')
@@ -67,7 +68,8 @@ def find_taupage_amis(regions: list) -> dict:
 
 
 def get_latest_docker_image_version():
-    return requests.get('https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags').json()[-1]['name']
+    url = 'https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags'
+    return requests.get(url).json()[-1]['name']
 
 
 def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, truststore):
@@ -85,7 +87,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, tr
             'application_version': '1.0',
             'networking': 'host',
             'ports': {'7001': '7001',
-                '9042': '9042'},
+                      '9042': '9042'},
             'environment': {
                 'CLUSTER_NAME': cluster_name,
                 'SEEDS': ','.join(all_seeds),
@@ -170,9 +172,9 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                               }}]
 
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
-                SecurityGroupIds=[security_group_id],
-                UserData=user_data, InstanceType=instance_type,
-                SubnetId=subnet_id, BlockDeviceMappings=block_devices)
+                                 SecurityGroupIds=[security_group_id],
+                                 UserData=user_data, InstanceType=instance_type,
+                                 SubnetId=subnet_id, BlockDeviceMappings=block_devices)
 
         instance_id = resp['Instances'][0]['InstanceId']
 
@@ -200,7 +202,7 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                                 'Name': 'InstanceId',
                                 'Value': instance_id
                             }],
-                            Period=60, # 1 minute
+                            Period=60,  # 1 minute
                             EvaluationPeriods=2,
                             Threshold=0,
                             ComparisonOperator='GreaterThanThreshold')
