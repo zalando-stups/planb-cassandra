@@ -154,7 +154,7 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                     ami: str, user_data: str, security_group_id: str):
 
-    with Action('Launching node {} in {}..'.format(ip['PublicIp']), region) as act:
+    with Action('Launching node {} in {}..'.format(ip['PublicIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         resp = ec2.describe_subnets()
