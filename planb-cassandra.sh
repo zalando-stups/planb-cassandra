@@ -16,10 +16,12 @@ then
 fi
 echo "Node IP address is $LISTEN_ADDRESS ..."
 
-if [ -z "$BROADCAST_ADDRESS" ] ;
-then
+while [ -z "$BROADCAST_ADDRESS" ] ;
+do
+    echo "Waiting for Public IP address to be assigned ..."
     export BROADCAST_ADDRESS=$(curl -Ls -m 4 http://169.254.169.254/latest/meta-data/public-ipv4)
-fi
+    sleep 5
+done
 echo "Public IP address is $BROADCAST_ADDRESS ..."
 
 if [ -z $SNITCH ] ;
