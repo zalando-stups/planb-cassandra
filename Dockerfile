@@ -29,6 +29,9 @@ ADD cassandra_template.yaml /etc/cassandra/
 # Slightly modified in order to run jolokia
 ADD cassandra-env.sh /etc/cassandra/
 
+# Override logging: STDOUT only
+ADD logback.xml /etc/cassandra/
+
 RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
 
 COPY planb-cassandra.sh /usr/local/bin/
