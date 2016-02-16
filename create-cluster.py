@@ -159,7 +159,7 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
 
 def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
                     ami: str, user_data: str, subnet_id: str, security_group_id: str,
-                    node_type: str):
+                    no_termination_protection: bool, node_type: str):
 
     with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
@@ -174,7 +174,8 @@ def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
         resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
                                  SecurityGroupIds=[security_group_id],
                                  UserData=user_data, InstanceType=instance_type,
-                                 SubnetId=subnet_id, BlockDeviceMappings=block_devices)
+                                 SubnetId=subnet_id, BlockDeviceMappings=block_devices,
+                                 DisableApiTermination=not(no_termination_protection))
 
         instance_id = resp['Instances'][0]['InstanceId']
 
@@ -228,9 +229,11 @@ def get_dmz_subnets(regions: list) -> dict:
 @click.command()
 @click.option('--cluster-size', default=3, type=int)
 @click.option('--instance-type', default='t2.micro')
+@click.option('--no-termination-protection', is_flag=True, default=False)
 @click.argument('cluster_name')
 @click.argument('regions', nargs=-1)
-def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str):
+def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
+        no_termination_protection: bool):
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
@@ -271,6 +274,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
                                 ami=taupage_amis[region], user_data=user_data,
                                 subnet_id=region_subnets[i % len(region_subnets)],
                                 security_group_id=security_groups[region]['GroupId'],
+                                no_termination_protection=no_termination_protection,
                                 node_type='SEED')
                 if i + 1 < seed_count:
                     info("Sleeping for 30s before launching next SEED node..")
@@ -291,6 +295,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str)
                                     ami=taupage_amis[region], user_data=user_data,
                                     subnet_id=region_subnets[i % len(region_subnets)],
                                     security_group_id=security_groups[region]['GroupId'],
+                                    no_termination_protection=no_termination_protection,
                                     node_type='NORMAL')
 
     except:
