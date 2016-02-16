@@ -157,58 +157,6 @@ def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
                 act.progress()
 
 
-def launch_instance(cluster_name: str, region: str, ip: str, instance_type: str,
-                    ami: str, user_data: str, subnet_id: str, security_group_id: str,
-                    no_termination_protection: bool, node_type: str):
-
-    with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
-        ec2 = boto3.client('ec2', region_name=region)
-
-        # make sure our root EBS volume is persisted
-        # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/RootDeviceStorage.html#Using_RootDeviceStorage
-        block_devices = [{'DeviceName': '/dev/sda1',
-                          'Ebs': {
-                              'DeleteOnTermination': False
-                              }}]
-
-        resp = ec2.run_instances(ImageId=ami.id, MinCount=1, MaxCount=1,
-                                 SecurityGroupIds=[security_group_id],
-                                 UserData=user_data, InstanceType=instance_type,
-                                 SubnetId=subnet_id, BlockDeviceMappings=block_devices,
-                                 DisableApiTermination=not(no_termination_protection))
-
-        instance_id = resp['Instances'][0]['InstanceId']
-
-        ec2.create_tags(Resources=[instance_id],
-                        Tags=[{'Key': 'Name', 'Value': cluster_name}])
-
-        # wait for instance to initialize before we can assign an IP address to it
-        while True:
-            resp = ec2.describe_instances(InstanceIds=[instance_id])
-            if resp['Reservations'][0]['Instances'][0]['State']['Name'] != 'pending':
-                break
-            time.sleep(5)
-            act.progress()
-
-        ec2.associate_address(InstanceId=instance_id, AllocationId=ip['AllocationId'])
-
-        # add an auto-recovery alarm for this instance
-        cw = boto3.client('cloudwatch', region_name=region)
-        cw.put_metric_alarm(AlarmName='{}-auto-recover'.format(instance_id),
-                            AlarmActions=['arn:aws:automate:{}:ec2:recover'.format(region)],
-                            MetricName='StatusCheckFailed_System',
-                            Namespace='AWS/EC2',
-                            Statistic='Minimum',
-                            Dimensions=[{
-                                'Name': 'InstanceId',
-                                'Value': instance_id
-                            }],
-                            Period=60,  # 1 minute
-                            EvaluationPeriods=2,
-                            Threshold=0,
-                            ComparisonOperator='GreaterThanThreshold')
-
-
 def get_dmz_subnets(regions: list) -> dict:
     '''
     Returns a dict of lists of DMZ subnets sorted by AZ.
@@ -265,16 +213,70 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         # Launch EC2 instances with correct user data
         subnets = get_dmz_subnets(regions)
 
+        def launch_instance(region: str, ip: str, ami: str, subnet_id: str,
+                            security_group_id: str, node_type: str):
+
+            with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
+                ec2 = boto3.client('ec2', region_name=region)
+
+                # make sure our root EBS volume is persisted
+                # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/RootDeviceStorage.html#Using_RootDeviceStorage
+                block_devices = [{'DeviceName': '/dev/sda1',
+                                  'Ebs': {
+                                      'DeleteOnTermination': False
+                                      }}]
+
+                resp = ec2.run_instances(ImageId=ami.id,
+                                         MinCount=1,
+                                         MaxCount=1,
+                                         SecurityGroupIds=[security_group_id],
+                                         UserData=user_data,
+                                         InstanceType=instance_type,
+                                         SubnetId=subnet_id,
+                                         BlockDeviceMappings=block_devices,
+                                         DisableApiTermination=not(no_termination_protection))
+
+                instance_id = resp['Instances'][0]['InstanceId']
+
+                ec2.create_tags(Resources=[instance_id],
+                                Tags=[{'Key': 'Name', 'Value': cluster_name}])
+
+                # wait for instance to initialize before we can assign an IP address to it
+                while True:
+                    resp = ec2.describe_instances(InstanceIds=[instance_id])
+                    if resp['Reservations'][0]['Instances'][0]['State']['Name'] != 'pending':
+                        break
+                    time.sleep(5)
+                    act.progress()
+
+                ec2.associate_address(InstanceId=instance_id,
+                                      AllocationId=ip['AllocationId'])
+
+                # add an auto-recovery alarm for this instance
+                cw = boto3.client('cloudwatch', region_name=region)
+                cw.put_metric_alarm(AlarmName='{}-auto-recover'.format(instance_id),
+                                    AlarmActions=['arn:aws:automate:{}:ec2:recover'.format(region)],
+                                    MetricName='StatusCheckFailed_System',
+                                    Namespace='AWS/EC2',
+                                    Statistic='Minimum',
+                                    Dimensions=[{
+                                        'Name': 'InstanceId',
+                                        'Value': instance_id
+                                    }],
+                                    Period=60,  # 1 minute
+                                    EvaluationPeriods=2,
+                                    Threshold=0,
+                                    ComparisonOperator='GreaterThanThreshold')
+
         # Launch sequence:
         # start all the seed nodes
         for region, ips in seed_nodes.items():
             region_subnets = subnets[region]
             for i, ip in enumerate(ips):
-                launch_instance(cluster_name, region, ip, instance_type=instance_type,
-                                ami=taupage_amis[region], user_data=user_data,
+                launch_instance(region, ip,
+                                ami=taupage_amis[region],
                                 subnet_id=region_subnets[i % len(region_subnets)],
                                 security_group_id=security_groups[region]['GroupId'],
-                                no_termination_protection=no_termination_protection,
                                 node_type='SEED')
                 if i + 1 < seed_count:
                     info("Sleeping for 30s before launching next SEED node..")
@@ -291,11 +293,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                     # avoid stating all nodes at the same time
                     info("Sleeping for 30s before launching next node..")
                     time.sleep(30)
-                    launch_instance(cluster_name, region, ip, instance_type=instance_type,
-                                    ami=taupage_amis[region], user_data=user_data,
+                    launch_instance(region, ip,
+                                    ami=taupage_amis[region],
                                     subnet_id=region_subnets[i % len(region_subnets)],
                                     security_group_id=security_groups[region]['GroupId'],
-                                    no_termination_protection=no_termination_protection,
                                     node_type='NORMAL')
 
     except:
