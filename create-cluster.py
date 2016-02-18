@@ -8,6 +8,8 @@ import click
 import collections
 import yaml
 import requests
+import string
+import random
 from clickclick import Action, info
 from subprocess import check_call, call
 import tempfile
@@ -93,6 +95,7 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, tr
                 'SEEDS': ','.join(all_seeds),
                 'KEYSTORE': keystore_base64,
                 'TRUSTSTORE': truststore_base64,
+                'ADMIN_PASSWORD': generate_password()
                 }
             }
     # TODO: add KMS-encrypted keystore/truststore
@@ -100,6 +103,11 @@ def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, tr
     serialized = yaml.safe_dump(data)
     user_data = '#taupage-ami-config\n{}'.format(serialized)
     return user_data
+
+
+def generate_password(length: int = 32) -> str:
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    return "".join(random.choice(alphabet) for x in range(length))
 
 
 def generate_certificate(cluster_name: str):
