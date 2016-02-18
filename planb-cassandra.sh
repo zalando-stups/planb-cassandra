@@ -52,4 +52,17 @@ echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
 
 echo "Starting Cassandra ..."
-/usr/sbin/cassandra -f
+/usr/sbin/cassandra -f &
+
+#
+# Try to override default superuser password (we don't care if it
+# fails, that would just mean we are not the first one to do that).
+#
+sleep 60
+cqlsh -u cassandra -p cassandra \
+      -e "\
+ALTER USER cassandra WITH PASSWORD '$(echo $ADMIN_PASSWORD | sed "s/'/''/g")'; \
+ALTER KEYSPACE system_auth WITH replication = {class: 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g")};"
+
+# Make sure the script don't exit at this point, if cassandra is still there.
+wait

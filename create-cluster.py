@@ -8,6 +8,8 @@ import click
 import collections
 import yaml
 import requests
+import string
+import random
 from clickclick import Action, info
 from subprocess import check_call, call
 import tempfile
@@ -72,34 +74,9 @@ def get_latest_docker_image_version():
     return requests.get(url).json()[-1]['name']
 
 
-def generate_taupage_user_data(cluster_name: str, seed_nodes: dict, keystore, truststore):
-    '''
-    Generate Taupage user data to start a Cassandra node
-    http://docs.stups.io/en/latest/components/taupage.html
-    '''
-    keystore_base64 = base64.b64encode(keystore)
-    truststore_base64 = base64.b64encode(truststore)
-    version = get_latest_docker_image_version()
-    all_seeds = [ip['PublicIp'] for region, ips in seed_nodes.items() for ip in ips]
-    data = {'runtime': 'Docker',
-            'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
-            'application_id': cluster_name,
-            'application_version': '1.0',
-            'networking': 'host',
-            'ports': {'7001': '7001',
-                      '9042': '9042'},
-            'environment': {
-                'CLUSTER_NAME': cluster_name,
-                'SEEDS': ','.join(all_seeds),
-                'KEYSTORE': keystore_base64,
-                'TRUSTSTORE': truststore_base64,
-                }
-            }
-    # TODO: add KMS-encrypted keystore/truststore
-
-    serialized = yaml.safe_dump(data)
-    user_data = '#taupage-ami-config\n{}'.format(serialized)
-    return user_data
+def generate_password(length: int = 32) -> str:
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    return "".join(random.choice(alphabet) for x in range(length))
 
 
 def generate_certificate(cluster_name: str):
@@ -208,6 +185,39 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         setup_security_groups(cluster_name, public_ips, security_groups)
 
         taupage_amis = find_taupage_amis(regions)
+
+        def generate_taupage_user_data() -> str:
+            '''
+            Generate Taupage user data to start a Cassandra node
+            http://docs.stups.io/en/latest/components/taupage.html
+            '''
+            keystore_base64 = base64.b64encode(keystore)
+            truststore_base64 = base64.b64encode(truststore)
+            version = get_latest_docker_image_version()
+            all_seeds = [ip['PublicIp'] for region, ips in seed_nodes.items() for ip in ips]
+            data = {'runtime': 'Docker',
+                    'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
+                    'application_id': cluster_name,
+                    'application_version': '1.0',
+                    'networking': 'host',
+                    'ports': {'7001': '7001',
+                              '9042': '9042'},
+                    'environment': {
+                        'CLUSTER_NAME': cluster_name,
+                        'CLUSTER_SIZE': cluster_size,
+                        'REGIONS': ' '.join(regions),
+                        'SEEDS': ','.join(all_seeds),
+                        'KEYSTORE': keystore_base64,
+                        'TRUSTSTORE': truststore_base64,
+                        'ADMIN_PASSWORD': generate_password()
+                        }
+                    }
+            # TODO: add KMS-encrypted keystore/truststore
+
+            serialized = yaml.safe_dump(data)
+            user_data = '#taupage-ami-config\n{}'.format(serialized)
+            return user_data
+
         user_data = generate_taupage_user_data(cluster_name, seed_nodes, keystore, truststore)
 
         # Launch EC2 instances with correct user data
@@ -286,8 +296,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                 security_group_id=security_groups[region]['GroupId'],
                                 node_type='SEED')
                 if i + 1 < seed_count:
-                    info("Sleeping for 30s before launching next SEED node..")
-                    time.sleep(30)
+                    # give the first node some extra time to setup system_auth keyspace
+                    sleep = 60 if i == 0 else 30
+                    info("Sleeping for {}s before launching next SEED node..".format(sleep))
+                    time.sleep(sleep)
 
         # TODO: make sure all seed nodes are up
 
