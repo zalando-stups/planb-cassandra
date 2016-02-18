@@ -75,7 +75,7 @@ def get_latest_docker_image_version():
 
 
 def generate_password(length: int = 32) -> str:
-    alphabet = string.ascii_letters + string.digits + string.punctuation
+    alphabet = (string.ascii_letters + string.digits + string.punctuation).replace('\\', '')
     return "".join(random.choice(alphabet) for x in range(length))
 
 
