@@ -218,7 +218,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
             user_data = '#taupage-ami-config\n{}'.format(serialized)
             return user_data
 
-        user_data = generate_taupage_user_data(cluster_name, seed_nodes, keystore, truststore)
+        user_data = generate_taupage_user_data()
 
         # Launch EC2 instances with correct user data
         subnets = get_dmz_subnets(regions)
