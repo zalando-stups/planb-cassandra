@@ -60,7 +60,9 @@ echo "Starting Cassandra ..."
 #
 sleep 60
 cqlsh -u cassandra -p cassandra \
-      -e "ALTER USER cassandra WITH PASSWORD '$(echo $ADMIN_PASSWORD | sed "s/'/''/g")';"
+      -e "\
+ALTER USER cassandra WITH PASSWORD '$(echo $ADMIN_PASSWORD | sed "s/'/''/g")'; \
+ALTER KEYSPACE system_auth WITH replication = {class: 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g")};"
 
 # Make sure the script don't exit at this point, if cassandra is still there.
 wait
