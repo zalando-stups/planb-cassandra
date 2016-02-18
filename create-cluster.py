@@ -236,7 +236,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                          BlockDeviceMappings=block_devices,
                                          DisableApiTermination=not(no_termination_protection))
 
-                instance_id = resp['Instances'][0]['InstanceId']
+                instance = resp['Instances'][0]
+                instance_id = instance['InstanceId']
 
                 ec2.create_tags(Resources=[instance_id],
                                 Tags=[{'Key': 'Name', 'Value': cluster_name}])
@@ -244,13 +245,19 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                 # wait for instance to initialize before we can assign an IP address to it
                 while True:
                     resp = ec2.describe_instances(InstanceIds=[instance_id])
-                    if resp['Reservations'][0]['Instances'][0]['State']['Name'] != 'pending':
+                    instance = resp['Reservations'][0]['Instances'][0]
+                    if instance['State']['Name'] != 'pending':
                         break
                     time.sleep(5)
                     act.progress()
 
                 ec2.associate_address(InstanceId=instance_id,
                                       AllocationId=ip['AllocationId'])
+
+                # tag the attached EBS volume for easier cleanup when testing
+                volume_id = instance['BlockDeviceMappings'][0]['Ebs']['VolumeId']
+                ec2.create_tags(Resources=[volume_id],
+                                Tags=[{'Key': 'Name', 'Value': cluster_name}])
 
                 # add an auto-recovery alarm for this instance
                 cw = boto3.client('cloudwatch', region_name=region)
