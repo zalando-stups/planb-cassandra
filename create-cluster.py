@@ -261,7 +261,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
 
                 # add an auto-recovery alarm for this instance
                 cw = boto3.client('cloudwatch', region_name=region)
-                cw.put_metric_alarm(AlarmName='{}-auto-recover'.format(instance_id),
+                cw.put_metric_alarm(AlarmName='{}-{}-auto-recover'.format(cluster_name, instance_id),
                                     AlarmActions=['arn:aws:automate:{}:ec2:recover'.format(region)],
                                     MetricName='StatusCheckFailed_System',
                                     Namespace='AWS/EC2',
