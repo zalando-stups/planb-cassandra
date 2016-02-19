@@ -49,7 +49,7 @@ the first schema:
     cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
 
 The generated administrator password is available inside the docker
-container in an environment variable `ADMIN_PASSWORD`.
+container in an environment variable ``ADMIN_PASSWORD``.
 
 Troubleshooting
 ===============
