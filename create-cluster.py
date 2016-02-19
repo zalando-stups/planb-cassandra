@@ -158,10 +158,11 @@ def get_dmz_subnets(regions: list) -> dict:
 @click.option('--cluster-size', default=3, type=int)
 @click.option('--instance-type', default='t2.micro')
 @click.option('--no-termination-protection', is_flag=True, default=False)
+@click.option('--scalyr-key')
 @click.argument('cluster_name')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
-        no_termination_protection: bool):
+        no_termination_protection: bool, scalyr_key: str):
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
@@ -213,7 +214,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                         'KEYSTORE': keystore_base64,
                         'TRUSTSTORE': truststore_base64,
                         'ADMIN_PASSWORD': generate_password()
-                        }
+                        },
+                    'scalyr_account_key': scalyr_key
                     }
             # TODO: add KMS-encrypted keystore/truststore
 
