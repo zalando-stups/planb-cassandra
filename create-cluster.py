@@ -9,6 +9,7 @@ import collections
 import yaml
 import requests
 import string
+import re
 import random
 from clickclick import Action, info
 from subprocess import check_call, call
@@ -74,9 +75,11 @@ def get_latest_docker_image_version():
     return requests.get(url).json()[-1]['name']
 
 
+password_chars = "{}{}{}".format(string.ascii_letters, string.digits,
+                                 re.sub("[\\\\'\"]", "", string.punctuation))
+
 def generate_password(length: int = 32) -> str:
-    alphabet = (string.ascii_letters + string.digits + string.punctuation).replace('\\', '')
-    return "".join(random.choice(alphabet) for x in range(length))
+    return "".join(random.choice(password_chars) for x in range(length))
 
 
 def generate_certificate(cluster_name: str):
