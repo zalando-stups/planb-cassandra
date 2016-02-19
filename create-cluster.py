@@ -4,6 +4,7 @@ import itertools
 import time
 import base64
 import boto3
+from botocore.exceptions import ClientError
 import click
 import collections
 import yaml
@@ -46,6 +47,19 @@ def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> 
                                        'IpRanges': [{'CidrIp': '{}/32'.format(ip['PublicIp'])}]})
             ip_permissions.append({'IpProtocol': '-1',
                                    'UserIdGroupPairs': [{'GroupId': sg['GroupId']}]})
+
+            # if we can find the Odd security group, authorize SSH access from it
+            try:
+                resp = ec2.describe_security_groups(GroupNames=['Odd (SSH Bastion Host)'])
+                odd_sg = resp['SecurityGroups'][0]
+
+                ip_permissions.append({'IpProtocol': 'tcp',
+                                       'FromPort': 22,  # port range: From-To
+                                       'ToPort': 22,
+                                       'UserIdGroupPairs': [{'GroupId': odd_sg['GroupId']}]})
+            except ClientError:
+                pass
+
             ec2.authorize_security_group_ingress(GroupId=sg['GroupId'],
                                                  IpPermissions=ip_permissions)
 
