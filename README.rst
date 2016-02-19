@@ -37,14 +37,19 @@ To create a cluster named "mycluster" in two regions with 3 nodes per region (de
     $ ./create-cluster.py mycluster eu-west-1 eu-central-1
 
 After allowing SSH access (TCP port 22) by changing the Security Group,
-you can use `Più`_ to get SSH access and create your first schema:
+you can use `Più`_ to get SSH access and create your application user and
+the first schema:
 
 .. code-block:: bash
 
     $ piu 172.31.1.1 "initial Cassandra setup"  # replace private IP
-    $ docker exec -it taupageapp cqlsh
+    $ docker exec -it taupageapp bash
+    (docker)$ cqlsh -u cassandra -p $ADMIN_PASSWORD
+    cqlsh> CREATE USER myuser WITH PASSWORD '...' NOSUPERUSER;
     cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
 
+The generated administrator password is available inside the docker
+container in an environment variable `ADMIN_PASSWORD`.
 
 Troubleshooting
 ===============
