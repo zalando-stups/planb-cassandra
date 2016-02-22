@@ -171,11 +171,15 @@ def get_dmz_subnets(regions: list) -> dict:
 @click.command()
 @click.option('--cluster-size', default=3, type=int)
 @click.option('--instance-type', default='t2.micro')
+@click.option('--volume-type', default='gp2', help='gp2 (default) | io1 | standard')
+@click.option('--volume-size', default=8, type=int, help='in GB, default: 8')
+@click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
 @click.option('--no-termination-protection', is_flag=True, default=False)
 @click.option('--scalyr-key')
 @click.argument('cluster_name')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
+        volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, scalyr_key: str):
     if not regions:
         raise click.UsageError('Please specify at least one region')
@@ -250,10 +254,13 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
 
                 # make sure our root EBS volume is persisted
                 # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/RootDeviceStorage.html#Using_RootDeviceStorage
-                block_devices = [{'DeviceName': '/dev/sda1',
-                                  'Ebs': {
-                                      'DeleteOnTermination': False
-                                      }}]
+                # note: we cannot specify encryption flag here, it depends solely on the AMI
+                ebs = {'VolumeType': volume_type,
+                       'VolumeSize': volume_size,
+                       'DeleteOnTermination': False}
+                if volume_type == 'io1':
+                       ebs['Iops'] = volume_iops
+                block_devices = [{'DeviceName': '/dev/sda1', 'Ebs': ebs}]
 
                 resp = ec2.run_instances(ImageId=ami.id,
                                          MinCount=1,
