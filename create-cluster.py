@@ -92,6 +92,7 @@ def get_latest_docker_image_version():
 password_chars = "{}{}{}".format(string.ascii_letters, string.digits,
                                  re.sub("[\\\\'\"]", "", string.punctuation))
 
+
 def generate_password(length: int = 32) -> str:
     return "".join(random.choice(password_chars) for x in range(length))
 
@@ -259,7 +260,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                        'VolumeSize': volume_size,
                        'DeleteOnTermination': False}
                 if volume_type == 'io1':
-                       ebs['Iops'] = volume_iops
+                    ebs['Iops'] = volume_iops
 
                 #
                 # 1. Override AMI-specified EBS settings with our preferred ones.
