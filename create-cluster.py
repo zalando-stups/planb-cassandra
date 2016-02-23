@@ -260,7 +260,21 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                        'DeleteOnTermination': False}
                 if volume_type == 'io1':
                        ebs['Iops'] = volume_iops
-                block_devices = [{'DeviceName': '/dev/sda1', 'Ebs': ebs}]
+
+                #
+                # 1. Override AMI-specified EBS settings with our preferred ones.
+                #
+                # 2. Override any ephemeral volumes with NoDevice mapping,
+                # otherwise auto-recovery alarm cannot be actually enabled.
+                #
+                block_devices = []
+                for bd in ami.block_device_mappings:
+                    mapping = {'DeviceName': bd['DeviceName']}
+                    if 'Ebs' in bd:
+                        mapping['Ebs'] = ebs
+                    else:
+                        mapping['NoDevice'] = ''  # we only expect one EBS volume
+                    block_devices.append(mapping)
 
                 resp = ec2.run_instances(ImageId=ami.id,
                                          MinCount=1,
