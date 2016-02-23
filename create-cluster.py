@@ -246,7 +246,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         # Launch EC2 instances with correct user data
         subnets = get_dmz_subnets(regions)
 
-        def launch_instance(region: str, ip: str, ami: str, subnet_id: str,
+        def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                             security_group_id: str, node_type: str):
 
             with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
