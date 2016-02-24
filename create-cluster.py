@@ -16,7 +16,7 @@ from clickclick import Action, info
 from subprocess import check_call, call
 import tempfile
 import os
-
+import sys
 
 def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> dict:
     '''
@@ -237,11 +237,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                     }
             # TODO: add KMS-encrypted keystore/truststore
 
-            serialized = yaml.safe_dump(data)
-            user_data = '#taupage-ami-config\n{}'.format(serialized)
-            return user_data
+            return data
 
         user_data = generate_taupage_user_data()
+        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
         # Launch EC2 instances with correct user data
         subnets = get_dmz_subnets(regions)
@@ -280,7 +279,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                          MinCount=1,
                                          MaxCount=1,
                                          SecurityGroupIds=[security_group_id],
-                                         UserData=user_data,
+                                         UserData=taupage_user_data,
                                          InstanceType=instance_type,
                                          SubnetId=subnet_id,
                                          BlockDeviceMappings=block_devices,
@@ -357,6 +356,25 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                     subnet_id=region_subnets[i % len(region_subnets)],
                                     security_group_id=security_groups[region]['GroupId'],
                                     node_type='NORMAL')
+
+        info('Cluster initialization completed successfully!')
+        sys.stdout.write('''
+The Cassandra cluster {cluster_name} was created with {cluster_size} nodes
+in each of the following AWS regions: {regions}
+
+You can now login to any of the cluster nodes with the superuser
+account using the following command:
+
+  $ cqlsh -u cassandra -p '{admin_password}'
+
+From there you can create non-superuser roles and otherwise configure
+the cluster.
+
+You might also need to update the Security Groups named {cluster_name}
+(in all regions!) to allow access to Cassandra from your application
+and optionally to allow access to Jolokia from your monitoring tool.
+'''.format(cluster_size=cluster_size, cluster_name=cluster_name, regions=' '.join(regions),
+           admin_password=user_data['environment']['ADMIN_PASSWORD']))
 
     except:
         for region, sg in security_groups.items():
