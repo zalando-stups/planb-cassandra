@@ -372,8 +372,9 @@ From there you can create non-superuser roles and otherwise configure
 the cluster.
 
 You might also need to update the Security Groups named {cluster_name}
-(in all regions!) to allow access to Cassandra from your application
-and optionally to allow access to Jolokia from your monitoring tool.
+(in all regions!) to allow access to Cassandra from your application (port 9042)
+and optionally to allow access to Jolokia (port 8778) and/or
+Prometheus Node Exporter (port 9100) from your monitoring tool.
 '''.format(cluster_size=cluster_size, cluster_name=cluster_name, regions=' '.join(regions),
            admin_password=user_data['environment']['ADMIN_PASSWORD']))
 
