@@ -18,6 +18,7 @@ import tempfile
 import os
 import sys
 
+
 def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> dict:
     '''
     Allow traffic between regions
