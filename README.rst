@@ -51,6 +51,13 @@ the first schema:
 The generated administrator password is available inside the docker
 container in an environment variable ``ADMIN_PASSWORD``.
 
+The list of private IP contact points for the application can be obtained with the following snippet:
+
+.. code-block:: bash
+
+    $ aws ec2 describe-instances --region $REGION --filter 'Name=tag:Name,Values=planb-cassandra' | grep PrivateIp | sed s/[^0-9.]//g | sort -u
+
+
 Troubleshooting
 ===============
 
