@@ -336,11 +336,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                 subnet_id=region_subnets[i % len(region_subnets)],
                                 security_group_id=security_groups[region]['GroupId'],
                                 node_type='SEED')
-                if i + 1 < seed_count:
-                    # give the first node some extra time to setup system_auth keyspace
-                    sleep = 60 if i == 0 else 30
-                    info("Sleeping for {}s before launching next SEED node..".format(sleep))
-                    time.sleep(sleep)
+                info("Sleeping for a minute before launching next SEED node..")
+                time.sleep(60)
 
         # TODO: make sure all seed nodes are up
 
@@ -351,8 +348,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
             for i, ip in enumerate(ips):
                 if i >= seed_count:
                     # avoid stating all nodes at the same time
-                    info("Sleeping for 30s before launching next node..")
-                    time.sleep(30)
+                    info("Sleeping for one minute before launching next node..")
+                    time.sleep(60)
                     launch_instance(region, ip,
                                     ami=taupage_amis[region],
                                     subnet_id=region_subnets[i % len(region_subnets)],
