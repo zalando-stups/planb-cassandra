@@ -21,9 +21,6 @@ RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" >
 RUN md5sum --check /tmp/jolokia-jvm-agent.jar.md5
 RUN rm -f /tmp/jolokia-jvm-agent.jar.md5
 
-RUN chmod -R 777 /var/lib/cassandra
-RUN chmod -R 777 /var/log/cassandra
-
 ADD cassandra_template.yaml /etc/cassandra/
 # Slightly modified in order to run jolokia
 ADD cassandra-env.sh /etc/cassandra/

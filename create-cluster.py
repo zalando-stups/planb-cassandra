@@ -234,9 +234,14 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                         'KEYSTORE': keystore_base64,
                         'TRUSTSTORE': truststore_base64,
                         'ADMIN_PASSWORD': generate_password()
-                        },
+                    },
+                    'mounts': {
+                        '/var/lib/cassandra': {
+                            'partition': '/dev/xvdf'
+                        }
+                    },
                     'scalyr_account_key': scalyr_key
-                    }
+            }
             # TODO: add KMS-encrypted keystore/truststore
 
             return data
@@ -253,29 +258,41 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
             with Action('Launching {} node {} in {}..'.format(node_type, ip['PublicIp'], region)) as act:
                 ec2 = boto3.client('ec2', region_name=region)
 
-                # make sure our root EBS volume is persisted
-                # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/RootDeviceStorage.html#Using_RootDeviceStorage
-                # note: we cannot specify encryption flag here, it depends solely on the AMI
-                ebs = {'VolumeType': volume_type,
-                       'VolumeSize': volume_size,
-                       'DeleteOnTermination': False}
-                if volume_type == 'io1':
-                    ebs['Iops'] = volume_iops
-
                 #
-                # 1. Override AMI-specified EBS settings with our preferred ones.
-                #
-                # 2. Override any ephemeral volumes with NoDevice mapping,
+                # Override any ephemeral volumes with NoDevice mapping,
                 # otherwise auto-recovery alarm cannot be actually enabled.
                 #
                 block_devices = []
                 for bd in ami.block_device_mappings:
-                    mapping = {'DeviceName': bd['DeviceName']}
                     if 'Ebs' in bd:
-                        mapping['Ebs'] = ebs
+                        # this has to be our root EBS
+
+                        #
+                        # We have to delete the Encrypted flag even if it
+                        # matches the snapshot setting, otherwise amazon will
+                        # complain rather loudly
+                        #
+                        del(bd['Ebs']['Encrypted'])
+
+                        block_devices.append(bd)
                     else:
-                        mapping['NoDevice'] = ''  # we only expect one EBS volume
-                    block_devices.append(mapping)
+                        # ignore any ephemeral volumes (aka. instance storage)
+                        block_devices.append({'DeviceName': bd['DeviceName'],
+                                              'NoDevice': ''})
+
+                # make sure our data EBS volume is persisted and encrypted
+                data_ebs = {'VolumeType': volume_type,
+                            'VolumeSize': volume_size,
+                            'DeleteOnTermination': False,
+                            'Encrypted': True}
+                if volume_type == 'io1':
+                    data_ebs['Iops'] = volume_iops
+
+                #
+                # Now add the data EBS with pre-defined device name (it is
+                # referred to in Taupage user data).
+                #
+                block_devices.append({'DeviceName': '/dev/xvdf', 'Ebs': data_ebs})
 
                 resp = ec2.run_instances(ImageId=ami.id,
                                          MinCount=1,
@@ -305,10 +322,11 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                 ec2.associate_address(InstanceId=instance_id,
                                       AllocationId=ip['AllocationId'])
 
-                # tag the attached EBS volume for easier cleanup when testing
-                volume_id = instance['BlockDeviceMappings'][0]['Ebs']['VolumeId']
-                ec2.create_tags(Resources=[volume_id],
-                                Tags=[{'Key': 'Name', 'Value': cluster_name}])
+                # tag the attached data EBS volume for easier cleanup when testing
+                for bd in instance['BlockDeviceMappings']:
+                    if bd['DeviceName'] == '/dev/xvdf':
+                        ec2.create_tags(Resources=[bd['Ebs']['VolumeId']],
+                                        Tags=[{'Key': 'Name', 'Value': cluster_name}])
 
                 # add an auto-recovery alarm for this instance
                 cw = boto3.client('cloudwatch', region_name=region)
