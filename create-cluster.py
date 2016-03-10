@@ -237,7 +237,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                     },
                     'mounts': {
                         '/var/lib/cassandra': {
-                            'partition': '/dev/xvdf'
+                            'partition': '/dev/xvdf',
+                            'options': 'noatime,nodiratime'
                         }
                     },
                     'scalyr_account_key': scalyr_key
