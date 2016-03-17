@@ -17,6 +17,7 @@ from subprocess import check_call, call
 import tempfile
 import os
 import sys
+import copy
 
 
 def setup_security_groups(cluster_name: str, public_ips: dict, result: dict) -> dict:
@@ -266,14 +267,20 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                 block_devices = []
                 for bd in ami.block_device_mappings:
                     if 'Ebs' in bd:
-                        # this has to be our root EBS
+                        #
+                        # This has to be our root EBS.
+                        #
+                        # If the Encrypted flag is present, we have to delete
+                        # it even if it matches the actual snapshot setting,
+                        # otherwise amazon will complain rather loudly.
+                        #
+                        # Take a deep copy before deleting the key:
+                        #
+                        bd = copy.deepcopy(bd)
 
-                        #
-                        # We have to delete the Encrypted flag even if it
-                        # matches the snapshot setting, otherwise amazon will
-                        # complain rather loudly
-                        #
-                        del(bd['Ebs']['Encrypted'])
+                        root_ebs = bd['Ebs']
+                        if 'Encrypted' in root_ebs:
+                            del(root_ebs['Encrypted'])
 
                         block_devices.append(bd)
                     else:
