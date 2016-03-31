@@ -328,6 +328,8 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
 
         # Launch sequence:
         # start all the seed nodes
+        total_seed_count = seed_count * len(regions)
+        seeds_launched = 0
         for region, ips in seed_nodes.items():
             region_subnets = subnets[region]
             for i, ip in enumerate(ips):
@@ -336,8 +338,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
                                 subnet_id=region_subnets[i % len(region_subnets)],
                                 security_group_id=security_groups[region]['GroupId'],
                                 node_type='SEED')
-                info("Sleeping for a minute before launching next SEED node..")
-                time.sleep(60)
+                seeds_launched += 1
+                if seeds_launched < total_seed_count:
+                    info("Sleeping for a minute before launching next SEED node..")
+                    time.sleep(60)
 
         # TODO: make sure all seed nodes are up
 
