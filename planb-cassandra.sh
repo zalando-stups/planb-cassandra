@@ -1,8 +1,13 @@
 #!/bin/sh
 # CLUSTER_NAME
+# LISTEN_ADDRESS
+# BROADCAST_ADDRESS
+# SNITCH
 # DATA_DIR
 # COMMIT_LOG_DIR
-# LISTEN_ADDRESS
+# TRUSTSTORE
+# KEYSTORE
+# ADMIN_PASSWORD
 
 if [ -z "$CLUSTER_NAME" ] ;
 then
@@ -10,24 +15,36 @@ then
     exit 1
 fi
 
+EC2_META_URL=http://169.254.169.254/latest/meta-data
+
 if [ -z "$LISTEN_ADDRESS" ] ;
 then
-    export LISTEN_ADDRESS=$(curl -Ls -m 4 http://169.254.169.254/latest/meta-data/local-ipv4)
+    export LISTEN_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/local-ipv4)
 fi
-echo "Node IP address is $LISTEN_ADDRESS ..."
+echo "Local IP address is $LISTEN_ADDRESS ..."
 
-while [ -z "$BROADCAST_ADDRESS" ] ;
-do
-    echo "Waiting for Public IP address to be assigned ..."
-    export BROADCAST_ADDRESS=$(curl -Ls -m 4 http://169.254.169.254/latest/meta-data/public-ipv4)
-    sleep 5
-done
-echo "Public IP address is $BROADCAST_ADDRESS ..."
-
-if [ -z $SNITCH ] ;
+if [ "x$SUBNET_TYPE" = xinternal ];
 then
-    export SNITCH="Ec2MultiRegionSnitch"
+    export BROADCAST_ADDRESS=$LISTEN_ADDRESS
+
+    if [ -z $SNITCH ] ;
+    then
+        export SNITCH="Ec2Snitch"
+    fi
+else
+    while [ -z "$BROADCAST_ADDRESS" ] ;
+    do
+        echo "Waiting for Public IP address to be assigned ..."
+        export BROADCAST_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/public-ipv4)
+        sleep 5
+    done
+
+    if [ -z $SNITCH ] ;
+    then
+        export SNITCH="Ec2MultiRegionSnitch"
+    fi
 fi
+echo "Broadcast IP address is $BROADCAST_ADDRESS ..."
 
 export DATA_DIR=${DATA_DIR:-/var/lib/cassandra}
 export COMMIT_LOG_DIR=${COMMIT_LOG_DIR:-/var/lib/cassandra/commit_logs}
