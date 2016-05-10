@@ -180,17 +180,18 @@ def allocate_private_ips(region: str, cluster_size: int, subnets: list, private_
 
         for i in range(cluster_size):
             ips_to_try = network_ips[i % len(subnets)]
+
+            if i < len(subnets):
+                #
+                # Some of the first addresses in each subnet are
+                # taken by AWS system instances that we can't see,
+                # so we try to skip them.
+                #
+                for _ in range(10):
+                    ips_to_try.__next__()
+
             while True:
                 act.progress()
-
-                if i < len(subnets):
-                    #
-                    # Some of the first addresses in each subnet are
-                    # taken by AWS system instances that we can't see,
-                    # so we try to skip them.
-                    #
-                    for _ in range(10):
-                        ips_to_try.__next__()
 
                 # get the next address in this subnet to try
                 ip = str(ips_to_try.__next__())
