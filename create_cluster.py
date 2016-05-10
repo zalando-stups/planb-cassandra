@@ -176,7 +176,7 @@ def allocate_private_ips(region: str, cluster_size: int, subnets: list, private_
         # which iterate through subnets to put the instances into
         # different Availability Zones.
         #
-        network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_ips() for s in subnets]
+        network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
 
         for i in range(cluster_size):
             ips_to_try = network_ips[i % len(subnets)]
@@ -245,8 +245,12 @@ def generate_taupage_user_data(options: dict) -> str:
     '''
     keystore_base64 = base64.b64encode(options['keystore'])
     truststore_base64 = base64.b64encode(options['truststore'])
+
     version = get_latest_docker_image_version()
+
+    # seed nodes across all regions
     all_seeds = [ip['_ip'] for region, ips in options['seed_nodes'].items() for ip in ips]
+
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
             'application_id': options['cluster_name'],
@@ -258,6 +262,7 @@ def generate_taupage_user_data(options: dict) -> str:
                 'CLUSTER_NAME': options['cluster_name'],
                 'CLUSTER_SIZE': options['cluster_size'],
                 'REGIONS': ' '.join(options['regions']),
+                'SUBNET_TYPE': 'internal' if options['internal'] else 'dmz',
                 'SEEDS': ','.join(all_seeds),
                 'KEYSTORE': keystore_base64,
                 'TRUSTSTORE': truststore_base64,
@@ -483,6 +488,9 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     if internal and len(regions) > 1:
         raise click.UsageError('You can specify only one region when using --internal')
 
+    if internal:
+        region = regions[0]
+
     keystore, truststore = generate_certificate(cluster_name)
 
     # List of IP addresses by region
@@ -495,7 +503,6 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         taupage_amis = find_taupage_amis(regions)
 
         if internal:
-            region = regions[0]
             subnets = get_subnets('internal-', regions)
             allocate_private_ips(region, cluster_size, subnets[region], node_ips)
         else:
