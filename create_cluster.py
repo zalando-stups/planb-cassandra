@@ -239,6 +239,34 @@ def get_subnets(prefix_filter: str, regions: list) -> dict:
     return subnets
 
 
+def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
+    r53 = boto3.client('route53')
+
+    zone = None
+    zones = r53.list_hosted_zones_by_name(DNSName=hosted_zone)
+    for z in zones['HostedZones']:
+        if z['Name'] == hosted_zone:
+            zone = z
+    if not zone:
+        raise Exception('Failed to find Hosted Zone {}'.format(hosted_zone))
+
+    for region, ips in node_ips.items():
+        with Action('Setting up Route53 SRV records in {}..'.format(region)):
+            r53.change_resource_record_sets(
+                HostedZoneId=zone['Id'],
+                ChangeBatch={
+                    'Changes': [{
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone),
+                            'Type': 'SRV',
+                            'TTL': 60,
+                            'ResourceRecords': [{'Value': '1 1 9042 {}'.format(ip['_ip'])} for ip in ips]
+                        }
+                    }]
+                })
+
+
 def generate_taupage_user_data(options: dict) -> str:
     '''
     Generate Taupage user data to start a Cassandra node
@@ -474,11 +502,12 @@ either correct the error or retry.
 @click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
 @click.option('--no-termination-protection', is_flag=True, default=False)
 @click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
+@click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, scalyr_key: str):
+        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
@@ -510,11 +539,14 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
             subnets = get_subnets('dmz-', regions)
             allocate_public_ips(regions, cluster_size, node_ips)
 
+        if hosted_zone:
+            setup_dns_records(cluster_name, hosted_zone, node_ips)
+
+        setup_security_groups(internal, cluster_name, node_ips, security_groups)
+
         # We should have up to 3 seeds nodes per DC
         seed_count = min(cluster_size, 3)
         seed_nodes = pick_seed_node_ips(node_ips, seed_count)
-
-        setup_security_groups(internal, cluster_name, node_ips, security_groups)
 
         user_data = generate_taupage_user_data(locals())
         taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
