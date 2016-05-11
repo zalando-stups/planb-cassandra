@@ -317,7 +317,7 @@ memtable_allocation_type: heap_buffers
 #
 # If your data directories are backed by SSD, you should increase this
 # to the number of cores.
-#memtable_flush_writers: 8
+memtable_flush_writers: $MEMTABLE_FLUSH_WRITERS
 
 # A fixed memory pool size in MB for for SSTable index summaries. If left
 # empty, this will default to 5% of the heap size. If the memory usage of
