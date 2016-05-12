@@ -203,7 +203,8 @@ def allocate_ip_addresses(region_subnets: dict, cluster_size: int, node_ips: dic
                     }])
                     if not resp['Reservations']:
                         address['PrivateIp'] = ip
-                        address['_ip'] = ip
+                        if not '_ip' in address:
+                            address['_ip'] = ip
                         break
 
                 node_ips[region].append(address)
