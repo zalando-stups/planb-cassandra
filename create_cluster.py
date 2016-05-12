@@ -157,54 +157,56 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
-def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
-    for region in regions:
-        with Action('Allocating Public IPs for {}..'.format(region)) as act:
+def allocate_ip_addresses(region_subnets: dict, cluster_size: int, node_ips: dict,
+                          take_elastic_ips: bool):
+    '''
+    Allocate unused private IP addresses by checking the current
+    reservations, and optionally allocate Elastic IPs.
+    '''
+    for region, subnets in region_subnets.items():
+        with Action('Allocating IP addresses in {}..'.format(region)) as act:
             ec2 = boto3.client('ec2', region_name=region)
+            #
+            # Here we have to account for the behavior of launch_*_nodes
+            # which iterate through subnets to put the instances into
+            # different Availability Zones.
+            #
+            network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
+
             for i in range(cluster_size):
-                resp = ec2.allocate_address(Domain='vpc')
-                resp['_ip'] = resp['PublicIp']
-                public_ips[region].append(resp)
-                act.progress()
+                ips_to_try = network_ips[i % len(subnets)]
 
+                if i < len(subnets):
+                    #
+                    # Some of the first addresses in each subnet are
+                    # taken by AWS system instances that we can't see,
+                    # so we try to skip them.
+                    #
+                    for _ in range(10):
+                        ips_to_try.__next__()
 
-def allocate_private_ips(region: str, cluster_size: int, subnets: list, private_ips: dict):
-    with Action('Searching for unused Private IPs in {}..'.format(region)) as act:
-        ec2 = boto3.client('ec2', region_name=region)
-        #
-        # Here we have to account for the behavior of launch_*_nodes
-        # which iterate through subnets to put the instances into
-        # different Availability Zones.
-        #
-        network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
+                if take_elastic_ips:
+                    address = ec2.allocate_address(Domain='vpc')
+                    address['_ip'] = address['PublicIp']
+                else:
+                    address = {}
 
-        for i in range(cluster_size):
-            ips_to_try = network_ips[i % len(subnets)]
+                while True:
+                    act.progress()
 
-            if i < len(subnets):
-                #
-                # Some of the first addresses in each subnet are
-                # taken by AWS system instances that we can't see,
-                # so we try to skip them.
-                #
-                for _ in range(10):
-                    ips_to_try.__next__()
+                    # get the next address in this subnet to try
+                    ip = str(ips_to_try.__next__())
 
-            while True:
-                act.progress()
+                    resp = ec2.describe_instances(Filters=[{
+                        'Name': 'private-ip-address',
+                        'Values': [ip]
+                    }])
+                    if not resp['Reservations']:
+                        address['PrivateIp'] = ip
+                        address['_ip'] = ip
+                        break
 
-                # get the next address in this subnet to try
-                ip = str(ips_to_try.__next__())
-
-                resp = ec2.describe_instances(Filters=[{
-                    'Name': 'private-ip-address',
-                    'Values': [ip]
-                }])
-                if not resp['Reservations']:
-                    private_ips[region].append({
-                        '_ip': ip
-                    })
-                    break
+                node_ips[region].append(address)
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -252,16 +254,21 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
 
     for region, ips in node_ips.items():
         with Action('Setting up Route53 SRV records in {}..'.format(region)):
+            name = '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone)
+
+            # NB: we always want the clients to connect using private IP addresses
+            records = [{'Value': '1 1 9042 {}'.format(ip['PrivateIp'])} for ip in ips]
+
             r53.change_resource_record_sets(
                 HostedZoneId=zone['Id'],
                 ChangeBatch={
                     'Changes': [{
                         'Action': 'UPSERT',
                         'ResourceRecordSet': {
-                            'Name': '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone),
+                            'Name': name,
                             'Type': 'SRV',
                             'TTL': 60,
-                            'ResourceRecords': [{'Value': '1 1 9042 {}'.format(ip['_ip'])} for ip in ips]
+                            'ResourceRecords': records
                         }
                     }]
                 })
@@ -359,7 +366,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
         #
         block_devices.append({'DeviceName': '/dev/xvdf', 'Ebs': data_ebs})
 
-        run_params = dict(
+        resp = ec2.run_instances(
             ImageId=ami.id,
             MinCount=1,
             MaxCount=1,
@@ -367,14 +374,9 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
             UserData=options['taupage_user_data'],
             InstanceType=options['instance_type'],
             SubnetId=subnet_id,
+            PrivateIpAddress=ip['PrivateIp'],
             BlockDeviceMappings=block_devices,
-            DisableApiTermination=not(options['no_termination_protection'])
-        )
-        if options['internal']:
-            run_params['PrivateIpAddress'] = ip['_ip']
-
-        # now run the instance with the above parameters
-        resp = ec2.run_instances(**run_params)
+            DisableApiTermination=not(options['no_termination_protection']))
 
         instance = resp['Instances'][0]
         instance_id = instance['InstanceId']
@@ -532,12 +534,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     try:
         taupage_amis = find_taupage_amis(regions)
 
-        if internal:
-            subnets = get_subnets('internal-', regions)
-            allocate_private_ips(region, cluster_size, subnets[region], node_ips)
-        else:
-            subnets = get_subnets('dmz-', regions)
-            allocate_public_ips(regions, cluster_size, node_ips)
+        subnets = get_subnets('internal-' if internal else 'dmz-', regions)
+
+        allocate_ip_addresses(subnets, cluster_size, node_ips,
+                              take_elastic_ips=not(internal))
 
         if hosted_zone:
             setup_dns_records(cluster_name, hosted_zone, node_ips)
