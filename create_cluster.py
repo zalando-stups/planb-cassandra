@@ -514,6 +514,10 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
 
+    cluster_name_re = '^[a-z][a-z0-9-]*[a-z0-9]$'
+    if not re.match(cluster_name_re, cluster_name):
+        raise click.UsageError('Cluster name must only contain lowercase latin letters, digits and dashes (it also must start with a letter and cannot end with a dash), in other words it must be matched by the following regular expression: {}'.format(cluster_name_re))
+
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
