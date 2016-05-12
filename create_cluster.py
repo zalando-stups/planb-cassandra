@@ -479,10 +479,9 @@ Prometheus Node Exporter (port 9100) from your monitoring tool.
            admin_password=options['user_data']['environment']['ADMIN_PASSWORD']))
 
 
-def print_internal_failure_message(options: dict):
+def print_failure_message():
     sys.stderr.write('''
-You were trying to deploy Plan B Cassandra into an internal subnet
-in the region {region}, but the process has failed :-(
+You were trying to deploy Plan B Cassandra, but the process has failed :-(
 
 One of the reasons might be that some of Private IP addresses we were
 going to use to launch the EC2 instances were taken by some other
@@ -493,7 +492,7 @@ to clean up after this attempt before retrying).
 Please review the error message to see if that is the case, then
 either correct the error or retry.
 
-'''.format(**options))
+''')
 
 
 @click.command()
@@ -560,8 +559,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         print_success_message(locals())
 
     except:
-        if internal:
-            print_internal_failure_message(locals())
+        print_failure_message()
 
         for region, sg in security_groups.items():
             ec2 = boto3.client('ec2', region)
