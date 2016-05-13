@@ -157,7 +157,21 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
+class IpAddressPoolDepletedException(Exception):
+
+    def __init__(self, cidr_block: str):
+        msg = "Pool of unused IP addresses depleted in subnet: {}".format(cidr_block)
+        super(IpAddressPoolDepletedException, self).__init__(msg)
+
+
 def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int):
+
+    def try_next_address(ips, subnet):
+        try:
+            return str(next(ips))
+        except StopIteration:
+            raise IpAddressPoolDepletedException(subnet['CidrBlock'])
+
     #
     # Here we have to account for the behavior of launch_*_nodes
     # which iterate through subnets to put the instances into
@@ -165,20 +179,20 @@ def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int)
     #
     network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
 
-    for ips in network_ips:
+    for idx, ips in enumerate(network_ips):
         #
         # Some of the first addresses in each subnet are
         # taken by AWS system instances that we can't see,
         # so we try to skip them.
         #
         for _ in range(10):
-            next(ips)
+            try_next_address(ips, subnets[idx])
 
     i = 0
     while i < cluster_size:
-        ips = network_ips[i % len(subnets)]
+        idx = i % len(subnets)
 
-        ip = str(next(ips))
+        ip = try_next_address(network_ips[idx], subnets[idx])
 
         resp = ec2.describe_instances(Filters=[{
             'Name': 'private-ip-address',
