@@ -260,6 +260,10 @@ def get_subnets(prefix_filter: str, regions: list) -> dict:
     return subnets
 
 
+def hostname_from_private_ip(region: str, ip: str) -> str:
+    return 'ip-{}.{}.compute.internal.'.format('-'.join(ip.split('.')), region)
+
+
 def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
     r53 = boto3.client('route53')
 
@@ -274,9 +278,15 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
     for region, ips in node_ips.items():
         with Action('Setting up Route53 SRV records in {}..'.format(region)):
             name = '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone)
-
-            # NB: we always want the clients to connect using private IP addresses
-            records = [{'Value': '1 1 9042 {}'.format(ip['PrivateIp'])} for ip in ips]
+            #
+            # NB: We always want the clients to connect using private
+            # IP addresses.
+            #
+            # But we must record the host names, otherwise the client
+            # will get the addresses ending with the dot from the DSN
+            # lookup and won't recognize them as such.
+            #
+            records = [{'Value': '1 1 9042 {}'.format(hostname_from_private_ip(ip['PrivateIp']))} for ip in ips]
 
             r53.change_resource_record_sets(
                 HostedZoneId=zone['Id'],
