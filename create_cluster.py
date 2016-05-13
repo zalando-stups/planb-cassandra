@@ -157,6 +157,38 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
+def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int):
+    #
+    # Here we have to account for the behavior of launch_*_nodes
+    # which iterate through subnets to put the instances into
+    # different Availability Zones.
+    #
+    network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
+
+    for ips in network_ips:
+        #
+        # Some of the first addresses in each subnet are
+        # taken by AWS system instances that we can't see,
+        # so we try to skip them.
+        #
+        for _ in range(10):
+            next(ips)
+
+    i = 0
+    while i < cluster_size:
+        ips = network_ips[i % len(subnets)]
+
+        ip = str(next(ips))
+
+        resp = ec2.describe_instances(Filters=[{
+            'Name': 'private-ip-address',
+            'Values': [ip]
+        }])
+        if not resp['Reservations']:
+            i += 1
+            yield ip
+
+
 def allocate_ip_addresses(region_subnets: dict, cluster_size: int, node_ips: dict,
                           take_elastic_ips: bool):
     '''
@@ -166,48 +198,20 @@ def allocate_ip_addresses(region_subnets: dict, cluster_size: int, node_ips: dic
     for region, subnets in region_subnets.items():
         with Action('Allocating IP addresses in {}..'.format(region)) as act:
             ec2 = boto3.client('ec2', region_name=region)
-            #
-            # Here we have to account for the behavior of launch_*_nodes
-            # which iterate through subnets to put the instances into
-            # different Availability Zones.
-            #
-            network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
 
-            for i in range(cluster_size):
-                ips_to_try = network_ips[i % len(subnets)]
-
-                if i < len(subnets):
-                    #
-                    # Some of the first addresses in each subnet are
-                    # taken by AWS system instances that we can't see,
-                    # so we try to skip them.
-                    #
-                    for _ in range(10):
-                        ips_to_try.__next__()
+            for ip in generate_private_ip_addresses(ec2, subnets, cluster_size):
+                address = {'PrivateIp': ip}
 
                 if take_elastic_ips:
-                    address = ec2.allocate_address(Domain='vpc')
-                    address['_ip'] = address['PublicIp']
+                    resp = ec2.allocate_address(Domain='vpc')
+                    address['_defaultIp'] = resp['PublicIp']
+                    address['PublicIp'] = resp['PublicIp']
+                    address['AllocationId'] = resp['AllocationId']
                 else:
-                    address = {}
-
-                while True:
-                    act.progress()
-
-                    # get the next address in this subnet to try
-                    ip = str(ips_to_try.__next__())
-
-                    resp = ec2.describe_instances(Filters=[{
-                        'Name': 'private-ip-address',
-                        'Values': [ip]
-                    }])
-                    if not resp['Reservations']:
-                        address['PrivateIp'] = ip
-                        if not '_ip' in address:
-                            address['_ip'] = ip
-                        break
+                    address['_defaultIp'] = ip
 
                 node_ips[region].append(address)
+                act.progress()
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -218,7 +222,7 @@ def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
     for region, ips in node_ips.items():
         seed_nodes[region] = ips[0:seed_count]
 
-        list_ips = [ip['_ip'] for ip in seed_nodes[region]]
+        list_ips = [ip['_defaultIp'] for ip in seed_nodes[region]]
         info('Our seed nodes in {} will be: {}'.format(region, ', '.join(list_ips)))
     return seed_nodes
 
@@ -286,7 +290,7 @@ def generate_taupage_user_data(options: dict) -> str:
     version = get_latest_docker_image_version()
 
     # seed nodes across all regions
-    all_seeds = [ip['_ip'] for region, ips in options['seed_nodes'].items() for ip in ips]
+    all_seeds = [ip['_defaultIp'] for region, ips in options['seed_nodes'].items() for ip in ips]
 
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
@@ -322,7 +326,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                     security_group_id: str, is_seed: bool, options: dict):
 
     node_type = 'SEED' if is_seed else 'NORMAL'
-    with Action('Launching {} node {} in {}..'.format(node_type, ip['_ip'], region)) as act:
+    with Action('Launching {} node {} in {}..'.format(node_type, ip['_defaultIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         #
