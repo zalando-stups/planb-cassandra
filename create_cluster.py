@@ -286,7 +286,7 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
             # will get the addresses ending with the dot from the DSN
             # lookup and won't recognize them as such.
             #
-            records = [{'Value': '1 1 9042 {}'.format(hostname_from_private_ip(ip['PrivateIp']))} for ip in ips]
+            records = [{'Value': '1 1 9042 {}'.format(hostname_from_private_ip(region, ip['PrivateIp']))} for ip in ips]
 
             r53.change_resource_record_sets(
                 HostedZoneId=zone['Id'],
