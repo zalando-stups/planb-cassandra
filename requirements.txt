@@ -1,3 +1,4 @@
 boto3
 clickclick
 netaddr
+requests
