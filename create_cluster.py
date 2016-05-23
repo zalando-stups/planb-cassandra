@@ -387,7 +387,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                     'DeleteOnTermination': False,
                     'Encrypted': True}
         if options['volume_type'] == 'io1':
-            data_ebs['Iops'] = volume_iops
+            data_ebs['Iops'] = options['volume_iops']
 
         #
         # Now add the data EBS with pre-defined device name (it is
