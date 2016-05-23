@@ -65,11 +65,15 @@ echo $KEYSTORE | base64 -d > /etc/cassandra/keystore
 echo "Finished bootstrapping node."
 # Add route 53record seed1.${CLUSTER_NAME}.domain.tld ?
 
+ncores=$(grep -c ^processor /proc/cpuinfo)
 #
 # Assuming we are using SSD storage, set memtable_flush_writers to the
 # number of CPU cores:
 #
-export MEMTABLE_FLUSH_WRITERS=$(grep -c ^processor /proc/cpuinfo)
+export MEMTABLE_FLUSH_WRITERS=$ncores
+
+# the same for concurrent_compactors setting:
+export CONCURRENT_COMPACTORS=$ncores
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
