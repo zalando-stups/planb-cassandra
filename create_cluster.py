@@ -157,54 +157,75 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
-def allocate_public_ips(regions: list, cluster_size: int, public_ips: dict):
-    for region in regions:
-        with Action('Allocating Public IPs for {}..'.format(region)) as act:
+class IpAddressPoolDepletedException(Exception):
+
+    def __init__(self, cidr_block: str):
+        msg = "Pool of unused IP addresses depleted in subnet: {}".format(cidr_block)
+        super(IpAddressPoolDepletedException, self).__init__(msg)
+
+
+def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int):
+
+    def try_next_address(ips, subnet):
+        try:
+            return str(next(ips))
+        except StopIteration:
+            raise IpAddressPoolDepletedException(subnet['CidrBlock'])
+
+    #
+    # Here we have to account for the behavior of launch_*_nodes
+    # which iterate through subnets to put the instances into
+    # different Availability Zones.
+    #
+    network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
+
+    for idx, ips in enumerate(network_ips):
+        #
+        # Some of the first addresses in each subnet are
+        # taken by AWS system instances that we can't see,
+        # so we try to skip them.
+        #
+        for _ in range(10):
+            try_next_address(ips, subnets[idx])
+
+    i = 0
+    while i < cluster_size:
+        idx = i % len(subnets)
+
+        ip = try_next_address(network_ips[idx], subnets[idx])
+
+        resp = ec2.describe_instances(Filters=[{
+            'Name': 'private-ip-address',
+            'Values': [ip]
+        }])
+        if not resp['Reservations']:
+            i += 1
+            yield ip
+
+
+def allocate_ip_addresses(region_subnets: dict, cluster_size: int, node_ips: dict,
+                          take_elastic_ips: bool):
+    '''
+    Allocate unused private IP addresses by checking the current
+    reservations, and optionally allocate Elastic IPs.
+    '''
+    for region, subnets in region_subnets.items():
+        with Action('Allocating IP addresses in {}..'.format(region)) as act:
             ec2 = boto3.client('ec2', region_name=region)
-            for i in range(cluster_size):
-                resp = ec2.allocate_address(Domain='vpc')
-                resp['_ip'] = resp['PublicIp']
-                public_ips[region].append(resp)
+
+            for ip in generate_private_ip_addresses(ec2, subnets, cluster_size):
+                address = {'PrivateIp': ip}
+
+                if take_elastic_ips:
+                    resp = ec2.allocate_address(Domain='vpc')
+                    address['_defaultIp'] = resp['PublicIp']
+                    address['PublicIp'] = resp['PublicIp']
+                    address['AllocationId'] = resp['AllocationId']
+                else:
+                    address['_defaultIp'] = ip
+
+                node_ips[region].append(address)
                 act.progress()
-
-
-def allocate_private_ips(region: str, cluster_size: int, subnets: list, private_ips: dict):
-    with Action('Searching for unused Private IPs in {}..'.format(region)) as act:
-        ec2 = boto3.client('ec2', region_name=region)
-        #
-        # Here we have to account for the behavior of launch_*_nodes
-        # which iterate through subnets to put the instances into
-        # different Availability Zones.
-        #
-        network_ips = [netaddr.IPNetwork(s['CidrBlock']).iter_hosts() for s in subnets]
-
-        for i in range(cluster_size):
-            ips_to_try = network_ips[i % len(subnets)]
-
-            if i < len(subnets):
-                #
-                # Some of the first addresses in each subnet are
-                # taken by AWS system instances that we can't see,
-                # so we try to skip them.
-                #
-                for _ in range(10):
-                    ips_to_try.__next__()
-
-            while True:
-                act.progress()
-
-                # get the next address in this subnet to try
-                ip = str(ips_to_try.__next__())
-
-                resp = ec2.describe_instances(Filters=[{
-                    'Name': 'private-ip-address',
-                    'Values': [ip]
-                }])
-                if not resp['Reservations']:
-                    private_ips[region].append({
-                        '_ip': ip
-                    })
-                    break
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -215,7 +236,7 @@ def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
     for region, ips in node_ips.items():
         seed_nodes[region] = ips[0:seed_count]
 
-        list_ips = [ip['_ip'] for ip in seed_nodes[region]]
+        list_ips = [ip['_defaultIp'] for ip in seed_nodes[region]]
         info('Our seed nodes in {} will be: {}'.format(region, ', '.join(list_ips)))
     return seed_nodes
 
@@ -239,6 +260,49 @@ def get_subnets(prefix_filter: str, regions: list) -> dict:
     return subnets
 
 
+def hostname_from_private_ip(region: str, ip: str) -> str:
+    return 'ip-{}.{}.compute.internal.'.format('-'.join(ip.split('.')), region)
+
+
+def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
+    r53 = boto3.client('route53')
+
+    zone = None
+    zones = r53.list_hosted_zones_by_name(DNSName=hosted_zone)
+    for z in zones['HostedZones']:
+        if z['Name'] == hosted_zone:
+            zone = z
+    if not zone:
+        raise Exception('Failed to find Hosted Zone {}'.format(hosted_zone))
+
+    for region, ips in node_ips.items():
+        with Action('Setting up Route53 SRV records in {}..'.format(region)):
+            name = '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone)
+            #
+            # NB: We always want the clients to connect using private
+            # IP addresses.
+            #
+            # But we must record the host names, otherwise the client
+            # will get the addresses ending with the dot from the DSN
+            # lookup and won't recognize them as such.
+            #
+            records = [{'Value': '1 1 9042 {}'.format(hostname_from_private_ip(region, ip['PrivateIp']))} for ip in ips]
+
+            r53.change_resource_record_sets(
+                HostedZoneId=zone['Id'],
+                ChangeBatch={
+                    'Changes': [{
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': name,
+                            'Type': 'SRV',
+                            'TTL': 60,
+                            'ResourceRecords': records
+                        }
+                    }]
+                })
+
+
 def generate_taupage_user_data(options: dict) -> str:
     '''
     Generate Taupage user data to start a Cassandra node
@@ -250,7 +314,7 @@ def generate_taupage_user_data(options: dict) -> str:
     version = get_latest_docker_image_version()
 
     # seed nodes across all regions
-    all_seeds = [ip['_ip'] for region, ips in options['seed_nodes'].items() for ip in ips]
+    all_seeds = [ip['_defaultIp'] for region, ips in options['seed_nodes'].items() for ip in ips]
 
     data = {'runtime': 'Docker',
             'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
@@ -286,7 +350,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                     security_group_id: str, is_seed: bool, options: dict):
 
     node_type = 'SEED' if is_seed else 'NORMAL'
-    with Action('Launching {} node {} in {}..'.format(node_type, ip['_ip'], region)) as act:
+    with Action('Launching {} node {} in {}..'.format(node_type, ip['_defaultIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
         #
@@ -331,7 +395,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
         #
         block_devices.append({'DeviceName': '/dev/xvdf', 'Ebs': data_ebs})
 
-        run_params = dict(
+        resp = ec2.run_instances(
             ImageId=ami.id,
             MinCount=1,
             MaxCount=1,
@@ -339,14 +403,9 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
             UserData=options['taupage_user_data'],
             InstanceType=options['instance_type'],
             SubnetId=subnet_id,
+            PrivateIpAddress=ip['PrivateIp'],
             BlockDeviceMappings=block_devices,
-            DisableApiTermination=not(options['no_termination_protection'])
-        )
-        if options['internal']:
-            run_params['PrivateIpAddress'] = ip['_ip']
-
-        # now run the instance with the above parameters
-        resp = ec2.run_instances(**run_params)
+            DisableApiTermination=not(options['no_termination_protection']))
 
         instance = resp['Instances'][0]
         instance_id = instance['InstanceId']
@@ -448,10 +507,9 @@ Prometheus Node Exporter (port 9100) from your monitoring tool.
            admin_password=options['user_data']['environment']['ADMIN_PASSWORD']))
 
 
-def print_internal_failure_message(options: dict):
+def print_failure_message():
     sys.stderr.write('''
-You were trying to deploy Plan B Cassandra into an internal subnet
-in the region {region}, but the process has failed :-(
+You were trying to deploy Plan B Cassandra, but the process has failed :-(
 
 One of the reasons might be that some of Private IP addresses we were
 going to use to launch the EC2 instances were taken by some other
@@ -462,7 +520,7 @@ to clean up after this attempt before retrying).
 Please review the error message to see if that is the case, then
 either correct the error or retry.
 
-'''.format(**options))
+''')
 
 
 @click.command()
@@ -474,14 +532,19 @@ either correct the error or retry.
 @click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
 @click.option('--no-termination-protection', is_flag=True, default=False)
 @click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
+@click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, scalyr_key: str):
+        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
+
+    cluster_name_re = '^[a-z][a-z0-9-]*[a-z0-9]$'
+    if not re.match(cluster_name_re, cluster_name):
+        raise click.UsageError('Cluster name must only contain lowercase latin letters, digits and dashes (it also must start with a letter and cannot end with a dash), in other words it must be matched by the following regular expression: {}'.format(cluster_name_re))
 
     if not regions:
         raise click.UsageError('Please specify at least one region')
@@ -503,18 +566,19 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     try:
         taupage_amis = find_taupage_amis(regions)
 
-        if internal:
-            subnets = get_subnets('internal-', regions)
-            allocate_private_ips(region, cluster_size, subnets[region], node_ips)
-        else:
-            subnets = get_subnets('dmz-', regions)
-            allocate_public_ips(regions, cluster_size, node_ips)
+        subnets = get_subnets('internal-' if internal else 'dmz-', regions)
+
+        allocate_ip_addresses(subnets, cluster_size, node_ips,
+                              take_elastic_ips=not(internal))
+
+        if hosted_zone:
+            setup_dns_records(cluster_name, hosted_zone, node_ips)
+
+        setup_security_groups(internal, cluster_name, node_ips, security_groups)
 
         # We should have up to 3 seeds nodes per DC
         seed_count = min(cluster_size, 3)
         seed_nodes = pick_seed_node_ips(node_ips, seed_count)
-
-        setup_security_groups(internal, cluster_name, node_ips, security_groups)
 
         user_data = generate_taupage_user_data(locals())
         taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
@@ -527,8 +591,7 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         print_success_message(locals())
 
     except:
-        if internal:
-            print_internal_failure_message(locals())
+        print_failure_message()
 
         for region, sg in security_groups.items():
             ec2 = boto3.client('ec2', region)
