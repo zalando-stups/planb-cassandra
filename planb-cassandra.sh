@@ -66,14 +66,17 @@ echo "Finished bootstrapping node."
 # Add route 53record seed1.${CLUSTER_NAME}.domain.tld ?
 
 ncores=$(grep -c ^processor /proc/cpuinfo)
+ncores_4=$(( ncores / 4 ))
+[ $ncores_4 -gt 0 ] || ncores_4=1
+
 #
 # Assuming we are using SSD storage, set memtable_flush_writers to the
-# number of CPU cores:
+# number of CPU cores divided by 4:
 #
-export MEMTABLE_FLUSH_WRITERS=$ncores
+export MEMTABLE_FLUSH_WRITERS=$ncores_4
 
 # the same for concurrent_compactors setting:
-export CONCURRENT_COMPACTORS=$ncores
+export CONCURRENT_COMPACTORS=$ncores_4
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
