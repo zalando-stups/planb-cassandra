@@ -1,11 +1,11 @@
-FROM registry.opensource.zalan.do/stups/openjdk:8-24
+FROM registry.opensource.zalan.do/stups/openjdk:8-29
 
 MAINTAINER Zalando SE
 
 # SSL Storage Port, Jolokia Agent, CQL Native
 EXPOSE 7001 8778 9042
 
-ENV CASSIE_VERSION=2.1.14
+ENV CASSIE_VERSION=2.1.15
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN echo "deb http://debian.datastax.com/community stable main" | tee -a /etc/apt/sources.list.d/datastax.community.list
