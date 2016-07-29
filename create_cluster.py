@@ -20,6 +20,7 @@ import sys
 import copy
 import netaddr
 
+
 def setup_security_groups(internal: bool, cluster_name: str, node_ips: dict,
                           result: dict) -> dict:
     '''
@@ -311,13 +312,16 @@ def generate_taupage_user_data(options: dict) -> str:
     keystore_base64 = base64.b64encode(options['keystore'])
     truststore_base64 = base64.b64encode(options['truststore'])
 
-    version = get_latest_docker_image_version()
+    docker_image = options.get('docker_image')
+    if not docker_image:
+        version = get_latest_docker_image_version()
+        docker_image = 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version)
 
     # seed nodes across all regions
     all_seeds = [ip['_defaultIp'] for region, ips in options['seed_nodes'].items() for ip in ips]
 
     data = {'runtime': 'Docker',
-            'source': 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version),
+            'source': docker_image,
             'application_id': options['cluster_name'],
             'application_version': '1.0',
             'networking': 'host',
@@ -534,10 +538,11 @@ either correct the error or retry.
 @click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
+@click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str):
+        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str, docker_image: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
