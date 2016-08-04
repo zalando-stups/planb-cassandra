@@ -11,7 +11,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN echo "deb http://debian.datastax.com/community stable main" | tee -a /etc/apt/sources.list.d/datastax.community.list
 RUN curl -sL https://debian.datastax.com/debian/repo_key | apt-key add -
 RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
+RUN apt-get -y install zip unzip  # needed for the cqlsh issue workaround below
 RUN apt-get -y install cassandra=$CASSIE_VERSION cassandra-tools=$CASSIE_VERSION sysstat && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+#
+# Work around cqlsh issue with python-2.7.11+:
+#   https://issues.apache.org/jira/browse/CASSANDRA-11850
+#
+# This can be removed once cassandra-2.1.16 is available.
+#
+WORKDIR /usr/share/cassandra/lib
+RUN unzip cassandra-driver-internal-only-2.7.2.zip cassandra-driver-2.7.2/cassandra/cluster.py
+RUN sed -i s/callback=partial/partial/g cassandra-driver-2.7.2/cassandra/cluster.py
+RUN zip -f cassandra-driver-internal-only-2.7.2.zip cassandra-driver-2.7.2/cassandra/cluster.py
 
 RUN mkdir -p /opt/jolokia/
 
