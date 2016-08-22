@@ -37,6 +37,15 @@ To create a cluster named "mycluster" in two regions with 3 nodes per region (de
     $ mai login  # get temporary AWS credentials
     $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
 
+In order to be able to receive notification emails in case instance
+recovery is triggered, provide either SNS topic name in
+``--sns-topic``, or email to subscribe in ``--sns-email`` (or both).
+
+If only the email address is specified, then SNS topic name defaults
+to ``planb-cassandra-system-event``.  An SNS topic will be created (if
+it doesn't exist) in each of the specified regions.  If email is
+specified, then it will be subscribed to the topic.
+
 After allowing SSH access (TCP port 22) by changing the Security Group,
 you can use `Più`_ to get SSH access and create your application user and
 the first schema:
