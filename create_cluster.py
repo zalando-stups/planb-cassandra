@@ -304,6 +304,21 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
                 })
 
 
+def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> list:
+    if not(topic_name):
+        topic_name = 'planb-cassandra-system-event'
+
+    result = {}
+    for region in regions:
+        sns = boto3.client('sns', region_name=region)
+        resp = sns.create_topic(Name=topic_name)
+        topic_arn = resp['TopicArn']
+        if email:
+            sns.subscribe(TopicArn=topic_arn, Protocol='email', Endpoint=email)
+        result[region] = topic_arn
+    return result
+
+
 def generate_taupage_user_data(options: dict) -> str:
     '''
     Generate Taupage user data to start a Cassandra node
@@ -439,8 +454,12 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
 
         # add an auto-recovery alarm for this instance
         cw = boto3.client('cloudwatch', region_name=region)
+        alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
+        if options['alarm_topics']:
+            alarm_actions.append(options['alarm_topics'][region])
+
         cw.put_metric_alarm(AlarmName='{}-{}-auto-recover'.format(options['cluster_name'], instance_id),
-                            AlarmActions=['arn:aws:automate:{}:ec2:recover'.format(region)],
+                            AlarmActions=alarm_actions,
                             MetricName='StatusCheckFailed_System',
                             Namespace='AWS/EC2',
                             Statistic='Minimum',
@@ -539,10 +558,13 @@ either correct the error or retry.
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
+@click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
+@click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str, docker_image: str):
+        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
+        docker_image: str, sns_topic: str, sns_email: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
@@ -575,6 +597,11 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
 
         allocate_ip_addresses(subnets, cluster_size, node_ips,
                               take_elastic_ips=not(internal))
+
+        if sns_topic or sns_email:
+            alarm_topics = setup_sns_topics_for_alarm(regions, sns_topic, sns_email)
+        else:
+            alarm_topics = {}
 
         if hosted_zone:
             setup_dns_records(cluster_name, hosted_zone, node_ips)
