@@ -99,13 +99,13 @@ to scale up EC2 instances or update Taupage AMI.
 
 For every node in the cluster, one by one:
 
-#. Stop a node (nodetool stopdaemon).
+#. Stop a node (``nodetool stopdaemon``).
 #. Terminate EC2 instance, remember its IP.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
 #. Use the 'Launch More Like This' menu in AWS web console on one of the remaining nodes.
 #. Be sure to reuse the IP of the node you just terminated on the new node and to change the instance type (and/or pick a different Taupage AMI).
 #. While the new instance is spinning up, attach the (now detached) data volume to the new instance.
-#. Log in to node, check application logs, if it didn't start up correctly: docker restart taupageapp.
-#. Repair the node with ``nodetool repair`` (optional: if the node was down for less than max_hint_window_in_ms, which is by default 3 hours, hinted hand off should take care of streaming the changes from alive nodes).
+#. Log in to node, check application logs, if it didn't start up correctly: ``docker restart taupageapp``.
+#. Repair the node with ``nodetool repair`` (optional: if the node was down for less than ``max_hint_window_in_ms``, which is by default 3 hours, hinted hand off should take care of streaming the changes from alive nodes).
 #. Check status with ``nodetool status``.
 
 Proceed with other nodes as long as the current one is back and
