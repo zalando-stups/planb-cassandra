@@ -84,7 +84,7 @@ echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
 
 echo "Starting Cassandra ..."
-/usr/sbin/cassandra -f &
+/usr/sbin/cassandra -R -f &
 
 #
 # Try to override default superuser password (we don't care if it
