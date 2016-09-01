@@ -338,7 +338,7 @@ def generate_taupage_user_data(options: dict) -> str:
     data = {'runtime': 'Docker',
             'source': docker_image,
             'application_id': options['cluster_name'],
-            'application_version': '1.0',
+            'application_version': version,
             'networking': 'host',
             'ports': {'7001': '7001',
                       '9042': '9042'},
