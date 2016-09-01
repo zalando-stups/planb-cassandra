@@ -155,7 +155,7 @@ write_request_timeout_in_ms: 2000
 #
 # You can use a custom Snitch by setting this to the full class name
 # of the snitch, which will be assumed to be on your classpath.
-endpoint_snitch: SimpleSnitch
+endpoint_snitch: $SNITCH
 
 # The address or interface to bind the Thrift RPC service and native transport
 # server to.
