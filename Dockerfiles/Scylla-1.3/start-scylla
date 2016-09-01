@@ -41,7 +41,27 @@ fi
 
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/scylladb_template.yaml').read()))" > /etc/scylla/scylla.yaml
 
-/usr/bin/scylla --log-to-syslog 0 --log-to-stdout 1 $DEV_MODE $SEASTAR_IO $CPU_SET --default-log-level info --options-file /etc/scylla/scylla.yaml --listen-address $LISTEN_ADDRESS --rpc-address $LISTEN_ADDRESS --network-stack posix &
+if [ x"$SCYLLA_SMP" == "x" ];then
+        SCYLLA_SMP=1
+fi
+
+if [ x"$SCYLLA_MEMORY" == "x" ];then
+        SCYLLA_MEMORY="1G"
+fi
+
+/usr/bin/scylla --smp $SCYLLA_SMP \
+                --memory $SCYLLA_MEMORY \
+                --log-to-syslog 0 \
+                --log-to-stdout 1 \
+                --default-log-level info \
+                --options-file /etc/scylla/scylla.yaml \
+                --listen-address $LISTEN_ADDRESS \
+                --rpc-address $LISTEN_ADDRESS \
+                --network-stack posix \
+                $DEV_MODE \
+                $SEASTAR_IO \
+                $CPU_SET \
+                &
 
 source /etc/default/scylla-jmx
 export SCYLLA_HOME SCYLLA_CONF
