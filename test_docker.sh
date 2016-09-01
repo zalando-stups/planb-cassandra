@@ -11,6 +11,6 @@ docker run -e KEYSTORE=$KEYSTORE \
            -e CLUSTER_NAME=test-cluster \
            -e LISTEN_ADDRESS=localhost \
            -e SNITCH=SimpleSnitch \
-           -e SEEDS=localhost \
+           -e SEEDS=127.0.0.1 \
            -u 106 \
-           -it registry.opensource.zalan.do/stups/planb-cassandra-3.7:v1 $1
+           -it $1 $2
