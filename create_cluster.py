@@ -389,7 +389,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
         data_ebs = {'VolumeType': options['volume_type'],
                     'VolumeSize': options['volume_size'],
                     'DeleteOnTermination': False,
-                    'Encrypted': True}
+                    'Encrypted': False}
         if options['volume_type'] == 'io1':
             data_ebs['Iops'] = options['volume_iops']
 
