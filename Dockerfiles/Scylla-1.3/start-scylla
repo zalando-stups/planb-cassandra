@@ -2,7 +2,9 @@
 
  . /etc/default/scylla-server
 
-CPUSET=""
+EC2_META_URL=http://169.254.169.254/latest/meta-data
+
+CPU_SET=""
 if [ x"$SCYLLA_CPU_SET" != "x" ]; then
 	CPU_SET="--cpuset $SCYLLA_CPU_SET"
 fi
@@ -29,9 +31,11 @@ else
 	DEV_MODE="--developer-mode true"
 fi
 
-if [ x"$LISTEN_ADDRESS" == "x" ];then
-	LISTEN_ADDRESS=$(hostname -i)
+if [ -z "$LISTEN_ADDRESS" ] ;
+then
+    export LISTEN_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/local-ipv4)
 fi
+echo "Local IP address is $LISTEN_ADDRESS ..."
 
 if [ x"$SEEDS" != "x" ];then
 	SEEDS=$(echo $SEEDS | tr "," "\n" | xargs getent hosts | awk '{ print $1 }' | tr "\n" "," | head -c -1)
