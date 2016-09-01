@@ -4,7 +4,7 @@
 
 CPUSET=""
 if [ x"$SCYLLA_CPU_SET" != "x" ]; then
-	CPUSET="--cpuset $SCYLLA_CPU_SET"
+	CPU_SET="--cpuset $SCYLLA_CPU_SET"
 fi
 
 if [ "$SCYLLA_PRODUCTION" == "true" ]; then
@@ -14,7 +14,7 @@ if [ "$SCYLLA_PRODUCTION" == "true" ]; then
 		iotune --evaluation-directory $DATA_DIR \
                --format envfile \
                --options-file /var/lib/scylla/io.conf \
-               $CPUSET \
+               $CPU_SET \
                --timeout 600
 
 		if [ $? -ne 0 ]; then
@@ -55,8 +55,6 @@ fi
                 --log-to-stdout 1 \
                 --default-log-level info \
                 --options-file /etc/scylla/scylla.yaml \
-                --listen-address $LISTEN_ADDRESS \
-                --rpc-address $LISTEN_ADDRESS \
                 --network-stack posix \
                 $DEV_MODE \
                 $SEASTAR_IO \
