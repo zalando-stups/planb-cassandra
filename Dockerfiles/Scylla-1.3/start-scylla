@@ -43,6 +43,20 @@ else
 	SEEDS="$LISTEN_ADDRESS"
 fi
 
+if [ "x$SUBNET_TYPE" = xinternal ];
+then
+    export BROADCAST_ADDRESS=$LISTEN_ADDRESS
+
+    if [ -z $SNITCH ] ;
+    then
+        export SNITCH="Ec2Snitch"
+    fi
+else
+    echo "Public deployment not supported for ScyllaDB right now"
+    exit 1
+fi
+
+
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/scylladb_template.yaml').read()))" > /etc/scylla/scylla.yaml
 
 if [ x"$SCYLLA_SMP" == "x" ];then
