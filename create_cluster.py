@@ -400,11 +400,14 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                 block_devices.append({'DeviceName': bd['DeviceName'],
                                       'NoDevice': ''})
 
-        # make sure our data EBS volume is persisted and encrypted
+        #
+        # Make sure our data EBS volume is persisted, but NOT
+        # encrypted: the latter will prevent auto-recovery.
+        #
         data_ebs = {'VolumeType': options['volume_type'],
                     'VolumeSize': options['volume_size'],
                     'DeleteOnTermination': False,
-                    'Encrypted': True}
+                    'Encrypted': False}
         if options['volume_type'] == 'io1':
             data_ebs['Iops'] = options['volume_iops']
 
