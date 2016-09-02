@@ -12,6 +12,7 @@ ENV COMMIT_LOG_DIR /var/lib/cassandra/commit_log
 
 RUN rm -f /etc/scylla/scylla.yaml && chmod 0777 /etc/scylla
 RUN chmod 0777 /var/lib/cassandra
+RUN mkdir -p /conf/ && touch /conf/cassandra-rackdc.properties
 
 EXPOSE 10000 9042 9160 7000 7001
 
