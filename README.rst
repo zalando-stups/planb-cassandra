@@ -12,7 +12,6 @@ Features:
 * fully-automated setup including Elastic IPs, EC2 security groups, SSL certs
 * multi-region replication (Ec2MultiRegionSnitch_)
 * encrypted inter-node communication (SSL/TLS)
-* encrypted EBS storage volumes
 * `EC2 Auto Recovery`_ enabled
 * Jolokia_ agent to expose JMX metrics via HTTP
 
