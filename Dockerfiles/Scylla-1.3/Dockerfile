@@ -15,4 +15,6 @@ RUN chmod 0777 /var/lib/cassandra
 
 EXPOSE 10000 9042 9160 7000 7001
 
+COPY scm-source.json /
+
 CMD /start-scylla

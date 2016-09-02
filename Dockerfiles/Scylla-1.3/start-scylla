@@ -35,7 +35,7 @@ if [ -z "$LISTEN_ADDRESS" ] ;
 then
     export LISTEN_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/local-ipv4)
 fi
-echo "Local IP address is $LISTEN_ADDRESS ..."
+echo "LISTEN_ADDRESS set to: $LISTEN_ADDRESS ..."
 
 if [ x"$SEEDS" != "x" ];then
 	SEEDS=$(echo $SEEDS | tr "," "\n" | xargs getent hosts | awk '{ print $1 }' | tr "\n" "," | head -c -1)
@@ -43,7 +43,9 @@ else
 	SEEDS="$LISTEN_ADDRESS"
 fi
 
-if [ "x$SUBNET_TYPE" = xinternal ];
+echo "Seeds set to: $SEEDS"
+
+if [ "x$SUBNET_TYPE" = "xinternal" ];
 then
     export BROADCAST_ADDRESS=$LISTEN_ADDRESS
 
