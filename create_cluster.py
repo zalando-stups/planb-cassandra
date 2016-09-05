@@ -358,7 +358,7 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
-            'appdynamics_application': if options['application_name'] else options['cluster_name'],
+            'appdynamics_application': if options['appdynamics_application'] else options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
     # TODO: add KMS-encrypted keystore/truststore
@@ -564,7 +564,7 @@ either correct the error or retry.
 @click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
-@click.option('--application-name', help='Please specify the application name to be used')
+@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
