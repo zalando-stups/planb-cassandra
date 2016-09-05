@@ -358,7 +358,7 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
-            'appdynamics_application': if options['appdynamics_application'] else options['cluster_name'],
+            'appdynamics_application': options['appdynamics_application'] or options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
     # TODO: add KMS-encrypted keystore/truststore
