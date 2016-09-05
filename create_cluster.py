@@ -358,6 +358,7 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
+            'appdynamics_application': options['application_name'],
             'scalyr_account_key': options['scalyr_key']
     }
     # TODO: add KMS-encrypted keystore/truststore
@@ -563,11 +564,12 @@ either correct the error or retry.
 @click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
+@click.option('--application-name', help='Application name which will be used to represent your cluster in Appdynamics')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
-        docker_image: str, sns_topic: str, sns_email: str):
+        docker_image: str, sns_topic: str, sns_email: str, application_name: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
@@ -575,6 +577,9 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     cluster_name_re = '^[a-z][a-z0-9-]*[a-z0-9]$'
     if not re.match(cluster_name_re, cluster_name):
         raise click.UsageError('Cluster name must only contain lowercase latin letters, digits and dashes (it also must start with a letter and cannot end with a dash), in other words it must be matched by the following regular expression: {}'.format(cluster_name_re))
+
+    if not application_name:
+        raise.click.UsageError('Please specify application name which shell be used.')
 
     if not regions:
         raise click.UsageError('Please specify at least one region')
