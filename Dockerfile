@@ -27,6 +27,10 @@ RUN zip -f cassandra-driver-internal-only-2.7.2.zip cassandra-driver-2.7.2/cassa
 
 RUN mkdir -p /opt/jolokia/
 
+#Enable AppDynamics
+ADD utils /java-utils
+ENV PATH ${PATH}:/${JAVA_HOME}/bin:/java-utils
+
 ADD http://search.maven.org/remotecontent?filepath=org/jolokia/jolokia-jvm/1.3.2/jolokia-jvm-1.3.2-agent.jar /opt/jolokia/jolokia-jvm-agent.jar
 RUN chmod 744 /opt/jolokia/jolokia-jvm-agent.jar
 RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" > /tmp/jolokia-jvm-agent.jar.md5
@@ -39,6 +43,7 @@ ADD cassandra-env.sh /etc/cassandra/
 
 # Override logging: STDOUT only
 ADD logback.xml /etc/cassandra/
+
 
 RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
 
