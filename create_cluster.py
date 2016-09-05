@@ -569,7 +569,7 @@ either correct the error or retry.
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
-        docker_image: str, sns_topic: str, sns_email: str, application_name: str):
+        docker_image: str, sns_topic: str, sns_email: str, appdynamics_application: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
