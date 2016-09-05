@@ -177,8 +177,6 @@ JVM_OPTS="$JVM_OPTS -ea"
 JVM_OPTS="$JVM_OPTS -javaagent:$CASSANDRA_HOME/lib/jamm-0.3.0.jar"
 # add jolokia java agent
 JVM_OPTS="$JVM_OPTS -javaagent:/opt/jolokia/jolokia-jvm-agent.jar=port=8778,host=$LISTEN_ADDRESS"
-# add appdynamics agent
-JVM_OPTS="$-javaagent:/agents/appdynamics-jvm/javaagent.jar -Dappdynamics.agent.uniqueHostId=$(cat /agents/appdynamics-jvm/uniqueHostId) -Dappdynamics.analytics.agent.url=http://172.17.0.1:9090/v1/sinks/bt"
 
 # some JVMs will fill up their heap when accessed via JMX, see CASSANDRA-6541
 JVM_OPTS="$JVM_OPTS -XX:+CMSClassUnloadingEnabled"
