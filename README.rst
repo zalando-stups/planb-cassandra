@@ -36,6 +36,23 @@ To create a cluster named "mycluster" in two regions with 3 nodes per region (de
     $ mai login  # get temporary AWS credentials
     $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
 
+Available options are::
+
+    --cluster-name	Not actually an option, you must specify the name of a cluster to create
+    --cluster-size	Number of nodes to create per AWS region.  Default: 3
+    --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.micro
+    --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
+    --volume-size	Size of EBS data volume in GB for every node.  Default: 8
+    --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
+    --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
+    --internal		Deploy the cluster within one region, using private IPs only.
+    --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
+    --scalyr-key	Write Logs API Key for Scalyr (optional).
+    --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
+    --docker-image	Override default Docker image.
+    --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
+    --sns-email		Email address to subscribe to Amazon SNS notification topic.  See below for details.
+
 In order to be able to receive notification emails in case instance
 recovery is triggered, provide either SNS topic name in
 ``--sns-topic``, or email to subscribe in ``--sns-email`` (or both).
