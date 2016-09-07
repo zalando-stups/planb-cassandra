@@ -129,14 +129,12 @@ following these steps:
 #. Increase replication factor of ``system_auth`` keyspace to the
    desired new total number of nodes in every region affected.
 
-   For example, if your current settings are like ``replication =
-   {'class': 'NetworkTopologyStrategy', 'eu-central': 3, 'eu-west':
-   3}`` and you want to scale to 5 nodes per region, issue the
+   For example, if you want to scale to 5 nodes per region, issue the
    following CQL command on any of the nodes:
 
-   ALTER KEYSPACE system_auth WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-central': 5, 'eu-west': 5};
+   ``ALTER KEYSPACE system_auth WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-central': 5, 'eu-west': 5};``
 
-#. For public IPs setup only: pre-allocate Elastic IPs for the new
+#. *For public IPs setup only:* pre-allocate Elastic IPs for the new
    nodes in every region, then update security groups in every region
    to include all newly allocated Elastic IP addresses.
 
@@ -146,16 +144,31 @@ following these steps:
 
 #. Use the 'Launch More Like This' menu in the AWS web console on one
    of the running nodes.
+
 #. Make sure that under 'Instance Details' the setting 'Auto-assign
    Public IP' is set to 'Disable'.
+
 #. At the 'Add Storage' step add a data volume for the new node.  It
    should use ``/dev/sdf`` as the device name.  EBS encryption is not
    recommended as it might prevent auto-recovery.
+
 #. Launch the instance.
-#. While the instance is starting up, associate one of the
-   pre-allocated Elastic IP addresses with it.
+
+#. *For public IPs setup:* while the instance is starting up,
+   associate one of the pre-allocated Elastic IP addresses with it.
+
+   **Caution!** For multi-region setup the nodes are started in DMZ
+   subnet and thus don't have internet traffic before you give them a
+   public IP.  Be sure to do this before anything else, or the new
+   node won't be able to ship its logs and you won't be able to ssh
+   into it (restarting the node should help if it was too late).
+
 #. Monitor the logs of the new instance and ``nodetool status`` to
    track its progress in joining the ring.
+
+#. Locate the new instance's data volume and add the ``Name`` tag for
+   it (look at existing nodes and their data volumes).
+
 #. Use the 'CloudWatch Monitoring' > 'Add/Edit Alarms' to add an
    auto-recovery alarm for the new instance.
 
