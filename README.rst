@@ -129,8 +129,8 @@ following these steps:
 #. Increase replication factor of ``system_auth`` keyspace to the
    desired new total number of nodes in every region affected.
 
-   For example, if you want to scale to 5 nodes per region, issue the
-   following CQL command on any of the nodes:
+   For example, if you run in two regions and want to scale to 5 nodes
+   per region, issue the following CQL command on any of the nodes:
 
    ``ALTER KEYSPACE system_auth WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-central': 5, 'eu-west': 5};``
 
