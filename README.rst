@@ -145,6 +145,11 @@ following these steps:
 #. Use the 'Launch More Like This' menu in the AWS web console on one
    of the running nodes.
 
+#. Choose appropriate subnet for the new node: ``internal-...``
+   vs. ``dmz-...`` for public IPs setup.  Also try to pick an
+   under-represented Availability Zone here, the subnet name suffix
+   gives a hint: ``1a``, ``1b``, etc.
+
 #. Make sure that under 'Instance Details' the setting 'Auto-assign
    Public IP' is set to 'Disable'.
 
