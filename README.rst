@@ -84,6 +84,27 @@ The list of private IP contact points for the application can be obtained with t
     $ aws ec2 describe-instances --region $REGION --filter 'Name=tag:Name,Values=planb-cassandra' | grep PrivateIp | sed s/[^0-9.]//g | sort -u
 
 
+Client configuration for Public IPs setup
+=========================================
+
+When configuring your client application to talk to a Cassandra
+cluster deployed in AWS using Public IPs, be sure to enable address
+translation using EC2MultiRegionAddressTranslator_.  Not only it saves
+costs when communicating within single AWS region, it also prevents
+availability problems when security group for your Cassandra is not
+configured to allow client access on Public IPs (via the region's NAT
+instances addresses).
+
+Even if your client connects to the ring using Private IPs, the list
+of peers it gets from the first Cassandra node to be contacted only
+consists of Public IPs in such setup.  Should that node go down at a
+later time, the client has no chance of reconnecting to a different
+node if the client traffic on Public IPs is not allowed.  For the same
+reason the client won't be able to distribute load efficiently, as it
+will have to choose the same coordinator node for every request it
+sends (namely, the one it has first contacted via the Private IP).
+
+
 Troubleshooting
 ===============
 
@@ -207,6 +228,7 @@ data that the node is no longer responsible for.
 .. _STUPS: https://stups.io/
 .. _Taupage: http://docs.stups.io/en/latest/components/taupage.html
 .. _Ec2MultiRegionSnitch: http://docs.datastax.com/en/cassandra/2.1/cassandra/architecture/architectureSnitchEC2MultiRegion_c.html
+.. _EC2MultiRegionAddressTranslator https://datastax.github.io/java-driver/manual/address_resolution/#ec2-multi-region
 .. _EC2 Auto Recovery: https://aws.amazon.com/blogs/aws/new-auto-recovery-for-amazon-ec2/
 .. _Jolokia: https://jolokia.org/
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
