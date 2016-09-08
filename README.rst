@@ -228,7 +228,7 @@ data that the node is no longer responsible for.
 .. _STUPS: https://stups.io/
 .. _Taupage: http://docs.stups.io/en/latest/components/taupage.html
 .. _Ec2MultiRegionSnitch: http://docs.datastax.com/en/cassandra/2.1/cassandra/architecture/architectureSnitchEC2MultiRegion_c.html
-.. _EC2MultiRegionAddressTranslator https://datastax.github.io/java-driver/manual/address_resolution/#ec2-multi-region
+.. _EC2MultiRegionAddressTranslator: https://datastax.github.io/java-driver/manual/address_resolution/#ec2-multi-region
 .. _EC2 Auto Recovery: https://aws.amazon.com/blogs/aws/new-auto-recovery-for-amazon-ec2/
 .. _Jolokia: https://jolokia.org/
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
