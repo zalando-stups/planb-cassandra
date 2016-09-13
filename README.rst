@@ -50,6 +50,7 @@ Available options are::
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
     --docker-image	Override default Docker image.
+    --environment, -e	Extend/override environment section of Taupage user data.
     --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
     --sns-email		Email address to subscribe to Amazon SNS notification topic.  See below for details.
 
