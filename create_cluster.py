@@ -359,6 +359,7 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
+            'appdynamics_application': options['appdynamics_application'] or options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
 
@@ -566,12 +567,20 @@ either correct the error or retry.
 @click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
+<<<<<<< HEAD
 @click.option('--environment', '-e', multiple=True)
+=======
+@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
+>>>>>>> 285e6c43c9a02f796a2f15582f653e64c1aaae95
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
+<<<<<<< HEAD
         docker_image: str, sns_topic: str, sns_email: str, environment: list):
+=======
+        docker_image: str, sns_topic: str, sns_email: str, appdynamics_application: str):
+>>>>>>> 285e6c43c9a02f796a2f15582f653e64c1aaae95
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')

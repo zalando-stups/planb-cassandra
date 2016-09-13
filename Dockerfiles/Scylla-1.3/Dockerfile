@@ -2,7 +2,7 @@ FROM ubuntu:16.04
 RUN apt-get update
 RUN apt-get install -y wget vim
 RUN wget -O /etc/apt/sources.list.d/scylla.list http://downloads.scylladb.com/deb/ubuntu/scylla-1.3-xenial.list
-RUN apt-get update && apt-get install -y scylla-server scylla-jmx scylla-tools --force-yes
+RUN apt-get update && apt-get install -y vim less scylla-server scylla-jmx scylla-tools --force-yes
 
 COPY start-scylla /start-scylla
 COPY scylladb_template.yaml /scylladb_template.yaml
