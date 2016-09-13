@@ -36,6 +36,23 @@ To create a cluster named "mycluster" in two regions with 3 nodes per region (de
     $ mai login  # get temporary AWS credentials
     $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
 
+Available options are::
+
+    --cluster-name	Not actually an option, you must specify the name of a cluster to create
+    --cluster-size	Number of nodes to create per AWS region.  Default: 3
+    --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.micro
+    --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
+    --volume-size	Size of EBS data volume in GB for every node.  Default: 8
+    --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
+    --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
+    --internal		Deploy the cluster within one region, using private IPs only.
+    --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
+    --scalyr-key	Write Logs API Key for Scalyr (optional).
+    --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
+    --docker-image	Override default Docker image.
+    --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
+    --sns-email		Email address to subscribe to Amazon SNS notification topic.  See below for details.
+
 In order to be able to receive notification emails in case instance
 recovery is triggered, provide either SNS topic name in
 ``--sns-topic``, or email to subscribe in ``--sns-email`` (or both).
@@ -98,6 +115,94 @@ The output should look something like this (freshly bootstrapped cluster):
     UN  52.49.192.149  81.16 KB   256     32.1%             cb45fc4c-291d-4b2b-b50f-3a11048f0211  1c
     UN  52.49.128.58   81.22 KB   256     32.1%             8a270de3-b419-4baf-8449-f4bc65c51d0d  1a
 
+
+Scaling up instance
+===================
+
+The following manual process may be applied whenever there is a need
+to scale up EC2 instances or update Taupage AMI.
+
+For every node in the cluster, one by one:
+
+#. Stop a node (``nodetool stopdaemon``).
+#. Terminate EC2 instance, remember its IP.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
+#. Use the 'Launch More Like This' menu in AWS web console on one of the remaining nodes.
+#. Be sure to reuse the IP of the node you just terminated on the new node and to change the instance type (and/or pick a different Taupage AMI).
+#. While the new instance is spinning up, attach the (now detached) data volume to the new instance.  Use ``/dev/sdf`` as the device name.
+#. Log in to node, check application logs, if it didn't start up correctly: ``docker restart taupageapp``.
+#. Repair the node with ``nodetool repair`` (optional: if the node was down for less than ``max_hint_window_in_ms``, which is by default 3 hours, hinted hand off should take care of streaming the changes from alive nodes).
+#. Check status with ``nodetool status``.
+
+Proceed with other nodes as long as the current one is back and
+everything looks OK from nodetool and application points of view.
+
+
+Scaling out cluster
+===================
+
+It is possible to manually scale out already deployed cluster by
+following these steps:
+
+#. Increase replication factor of ``system_auth`` keyspace to the
+   desired new total number of nodes in every region affected.
+
+   For example, if you run in two regions and want to scale to 5 nodes
+   per region, issue the following CQL command on any of the nodes:
+
+   ``ALTER KEYSPACE system_auth WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-central': 5, 'eu-west': 5};``
+
+#. *For public IPs setup only:* pre-allocate Elastic IPs for the new
+   nodes in every region, then update security groups in every region
+   to include all newly allocated Elastic IP addresses.
+
+   For example, if scaling from 3 to 5 nodes in two regions you will
+   need 2 new IP addresses in every region and both security groups
+   need to be updated to include a total of 4 new addresses.
+
+#. Use the 'Launch More Like This' menu in the AWS web console on one
+   of the running nodes.
+
+#. Choose appropriate subnet for the new node: ``internal-...``
+   vs. ``dmz-...`` for public IPs setup.  Also try to pick an
+   under-represented Availability Zone here, the subnet name suffix
+   gives a hint: ``1a``, ``1b``, etc.
+
+#. Make sure that under 'Instance Details' the setting 'Auto-assign
+   Public IP' is set to 'Disable'.
+
+#. At the 'Add Storage' step add a data volume for the new node.  It
+   should use ``/dev/sdf`` as the device name.  EBS encryption is not
+   recommended as it might prevent auto-recovery.
+
+#. Launch the instance.
+
+#. *For public IPs setup:* while the instance is starting up,
+   associate one of the pre-allocated Elastic IP addresses with it.
+
+   **Caution!** For multi-region setup the nodes are started in DMZ
+   subnet and thus don't have internet traffic before you give them a
+   public IP.  Be sure to do this before anything else, or the new
+   node won't be able to ship its logs and you won't be able to ssh
+   into it (restarting the node should help if it was too late).
+
+#. Monitor the logs of the new instance and ``nodetool status`` to
+   track its progress in joining the ring.
+
+#. Locate the new instance's data volume and add the ``Name`` tag for
+   it (look at existing nodes and their data volumes).
+
+#. Use the 'CloudWatch Monitoring' > 'Add/Edit Alarms' to add an
+   auto-recovery alarm for the new instance.
+
+   Check '[x] Take the action: [*] Recover this instance' and leave
+   the rest of parameters at their default values.  It is also
+   recommended to set up a notification SNS topic for actual recovery
+   events.
+
+Only when the new node has fully joined, proceed to add more nodes.
+After all new nodes have joined, issue ``nodetool cleanup`` command on
+every node in order to free up the space that is still occupied by the
+data that the node is no longer responsible for.
 
 .. _STUPS: https://stups.io/
 .. _Taupage: http://docs.stups.io/en/latest/components/taupage.html
