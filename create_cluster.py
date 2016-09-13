@@ -362,8 +362,8 @@ def generate_taupage_user_data(options: dict) -> str:
             'scalyr_account_key': options['scalyr_key']
     }
 
-    for k,v in options['environment'].items():
-        data['environment'][k] = v
+    if options['environment']:
+        data['environment'].update(options['environment'])
 
     return data
 
