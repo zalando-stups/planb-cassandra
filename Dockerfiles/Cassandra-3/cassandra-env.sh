@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+JVM_OPTS="$JVM_OPTS -XX:+AlwaysPreTouch -XX:G1HeapRegionSize=16 -XX:G1ReservePercent=15 -XX:+ParallelRefProcEnabled -XX:-UseBiasedLocking -XX:+PrintGC -XX:+PrintGCDateStamps -XX:+PrintAdaptiveSizePolicy -XX:+UseG1GC -XX:
+MaxGCPauseMillis=500 -XX:InitiatingHeapOccupancyPercent=70 -XX:ParallelGCThreads=8 -XX:ConcGCThreads=8 -XX:G1RSetUpdatingPauseTimePercent=10 -XX:G1HeapWastePercent=15"
+
 calculate_heap_sizes()
 {
     case "`uname`" in

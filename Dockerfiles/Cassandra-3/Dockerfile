@@ -15,6 +15,7 @@ RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-m
 RUN apt-get -y install zip unzip vim less  # needed for the cqlsh issue workaround below
 RUN apt-get -y update && apt-get -y install cassandra sysstat && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+COPY TimeWindowCompactionStrategy-3.7.jar /usr/share/cassandra/lib/TimeWindowCompactionStrategy-3.7.jar
 #
 # Work around cqlsh issue with python-2.7.11+:
 #   https://issues.apache.org/jira/browse/CASSANDRA-11850
