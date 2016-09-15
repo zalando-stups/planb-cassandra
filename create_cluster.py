@@ -12,7 +12,7 @@ import requests
 import string
 import re
 import random
-from clickclick import Action, info
+from clickclick import Action, info, action
 from subprocess import check_call, call
 import tempfile
 import os
@@ -332,13 +332,14 @@ def generate_taupage_user_data(options: dict) -> str:
         version = get_latest_docker_image_version()
         docker_image = 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version)
 
+
     # seed nodes across all regions
     all_seeds = [ip['_defaultIp'] for region, ips in options['seed_nodes'].items() for ip in ips]
 
     data = {'runtime': 'Docker',
             'source': docker_image,
             'application_id': options['cluster_name'],
-            'application_version': version,
+            'application_version': "1.0",
             'networking': 'host',
             'ports': {'7001': '7001',
                       '9042': '9042'},
@@ -361,7 +362,9 @@ def generate_taupage_user_data(options: dict) -> str:
             'appdynamics_application': options['appdynamics_application'] or options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
-    # TODO: add KMS-encrypted keystore/truststore
+
+    if options['environment']:
+        data['environment'].update(options['environment'])
 
     return data
 
@@ -561,15 +564,18 @@ either correct the error or retry.
 @click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
+@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
 @click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
+@click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
-@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
-        docker_image: str, sns_topic: str, sns_email: str, appdynamics_application: str):
+        docker_image: str, sns_topic: str, sns_email: str, environment: list,
+        appdynamics_application: str):
+
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
@@ -586,6 +592,12 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
 
     if internal:
         region = regions[0]
+
+    if environment:
+        environment = dict(map(lambda x: x.split("="), environment))
+
+        for k,v in environment.items():
+            print("Adding optional env var: {}={}".format(k, v))
 
     keystore, truststore = generate_certificate(cluster_name)
 
