@@ -16,6 +16,7 @@ RUN apt-get -y install zip unzip vim less  # needed for the cqlsh issue workarou
 RUN apt-get -y update && apt-get -y install cassandra sysstat && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY TimeWindowCompactionStrategy-3.7.jar /usr/share/cassandra/lib/TimeWindowCompactionStrategy-3.7.jar
+
 #
 # Work around cqlsh issue with python-2.7.11+:
 #   https://issues.apache.org/jira/browse/CASSANDRA-11850
@@ -35,12 +36,13 @@ RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" >
 RUN md5sum --check /tmp/jolokia-jvm-agent.jar.md5
 RUN rm -f /tmp/jolokia-jvm-agent.jar.md5
 
-ADD cassandra_template.yaml /etc/cassandra/
-# Slightly modified in order to run jolokia
-ADD cassandra-env.sh /etc/cassandra/
+COPY cassandra_template.yaml /etc/cassandra/
+COPY cassandra-env.sh /etc/cassandra/
+COPY cassandra-env.sh-original /etc/cassandra/
+COPY jvm.options /etc/cassandra/
 
 # Override logging: STDOUT only
-ADD logback.xml /etc/cassandra/
+COPY logback.xml /etc/cassandra/
 
 RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
 

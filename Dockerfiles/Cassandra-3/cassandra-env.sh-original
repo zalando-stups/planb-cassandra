@@ -121,8 +121,6 @@ case "$jvm" in
         ;;
 esac
 
-JVM_OPTS="$JVM_OPTS -javaagent:/opt/jolokia/jolokia-jvm-agent.jar=port=8778,host=$LISTEN_ADDRESS"
-
 #GC log path has to be defined here because it needs to access CASSANDRA_HOME
 JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_HOME}/logs/gc.log"
 
@@ -230,12 +228,23 @@ fi
 # To enable remote JMX connections, uncomment lines below
 # with authentication and/or ssl enabled. See https://wiki.apache.org/cassandra/JmxSecurity
 #
+if [ "x$LOCAL_JMX" = "x" ]; then
+    LOCAL_JMX=yes
+fi
+
 # Specifies the default port over which Cassandra will be available for
 # JMX connections.
 # For security reasons, you should not expose this port to the internet.  Firewall it if needed.
 JMX_PORT="7199"
-JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT"
-JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=false"
+
+if [ "$LOCAL_JMX" = "yes" ]; then
+  JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT"
+  JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=false"
+else
+  JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.remote.port=$JMX_PORT"
+  JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.rmi.port=$JMX_PORT"
+  JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=true"
+fi
 
 # jmx ssl options
 #JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.ssl=false"
