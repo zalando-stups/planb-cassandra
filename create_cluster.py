@@ -330,7 +330,7 @@ def generate_taupage_user_data(options: dict) -> str:
     docker_image = options.get('docker_image')
     if not docker_image:
         version = get_latest_docker_image_version()
-        docker_image = 'registry.opensource.zalan.do/stups/planb-cassandra:{}'.format(version)
+        docker_image = 'registry.opensource.zalan.do/stups/planb-cassandra-3:{}'.format(version)
 
 
     # seed nodes across all regions
