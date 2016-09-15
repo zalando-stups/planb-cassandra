@@ -78,7 +78,10 @@ ncores_4=$(( ncores / 4 ))
 export MEMTABLE_FLUSH_WRITERS=$ncores_4
 
 # the same for concurrent_compactors setting:
-export CONCURRENT_COMPACTORS=$ncores_4
+
+if [ -z "$CONCURRENT_COMPACTORS" ]; then
+  export CONCURRENT_COMPACTORS=$ncores_4
+ fi
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
