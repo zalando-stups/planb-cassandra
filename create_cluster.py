@@ -102,7 +102,7 @@ def find_taupage_amis(regions: list) -> dict:
 
 
 def get_latest_docker_image_version():
-    url = 'https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra/tags'
+    url = 'https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags'
     return requests.get(url).json()[-1]['name']
 
 
