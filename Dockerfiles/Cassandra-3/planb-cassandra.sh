@@ -3,11 +3,12 @@
 # LISTEN_ADDRESS
 # BROADCAST_ADDRESS
 # SNITCH
-# DATA_DIR
-# COMMIT_LOG_DIR
+# CASSANDRA_HOME
 # TRUSTSTORE
 # KEYSTORE
 # ADMIN_PASSWORD
+# MEMTABLE_FLUSH_WRITERS
+# CONCURRENT_COMPACTORS
 
 if [ -z "$CLUSTER_NAME" ] ;
 then
@@ -46,10 +47,10 @@ else
 fi
 echo "Broadcast IP address is $BROADCAST_ADDRESS ..."
 
-export DATA_DIR=${DATA_DIR:-/var/lib/cassandra/data}
-export COMMIT_LOG_DIR=${COMMIT_LOG_DIR:-/var/lib/cassandra/data/commit_logs}
+export CASSANDRA_HOME=${CASSANDRA_HOME:-/var/lib/cassandra}
 
-mkdir -p $DATA_DIR
+# provide a symlink to lib from data volume
+ln -s /usr/share/cassandra/lib ${CASSANDRA_HOME}/lib
 
 if [ -z "$TRUSTSTORE" ]; then
     echo "TRUSTSTORE must be set (base64 encoded)."
@@ -75,13 +76,14 @@ ncores_4=$(( ncores / 4 ))
 # Assuming we are using SSD storage, set memtable_flush_writers to the
 # number of CPU cores divided by 4:
 #
-export MEMTABLE_FLUSH_WRITERS=$ncores_4
+if [ -z "$MEMTABLE_FLUSH_WRITERS" ]; then
+    export MEMTABLE_FLUSH_WRITERS=$ncores_4
+fi
 
 # the same for concurrent_compactors setting:
-
 if [ -z "$CONCURRENT_COMPACTORS" ]; then
-  export CONCURRENT_COMPACTORS=$ncores_4
- fi
+    export CONCURRENT_COMPACTORS=$ncores_4
+fi
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
