@@ -49,6 +49,7 @@ Available options are::
     --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
+    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3
     --docker-image	Override default Docker image.
     --environment, -e	Extend/override environment section of Taupage user data.
     --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.

@@ -101,8 +101,8 @@ def find_taupage_amis(regions: list) -> dict:
     return result
 
 
-def get_latest_docker_image_version():
-    url = 'https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags'
+def get_latest_docker_image_version(artifact_name):
+    url = 'https://registry.opensource.zalan.do/teams/stups/artifacts/{}/tags'.format(artifact_name)
     return requests.get(url).json()[-1]['name']
 
 
@@ -327,19 +327,13 @@ def generate_taupage_user_data(options: dict) -> str:
     keystore_base64 = base64.b64encode(options['keystore'])
     truststore_base64 = base64.b64encode(options['truststore'])
 
-    docker_image = options.get('docker_image')
-    if not docker_image:
-        version = get_latest_docker_image_version()
-        docker_image = 'registry.opensource.zalan.do/stups/planb-cassandra-3:{}'.format(version)
-
-
     # seed nodes across all regions
     all_seeds = [ip['_defaultIp'] for region, ips in options['seed_nodes'].items() for ip in ips]
 
     data = {'runtime': 'Docker',
-            'source': docker_image,
+            'source': options['docker_image'],
             'application_id': options['cluster_name'],
-            'application_version': "1.0",
+            'application_version': options['image_version'],
             'networking': 'host',
             'ports': {'7001': '7001',
                       '9042': '9042'},
@@ -565,17 +559,18 @@ either correct the error or retry.
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
-@click.option('--docker-image', help='Docker image to use (default: use latest planb-cassandra)')
+@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3)')
+@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3)')
 @click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
 @click.argument('regions', nargs=-1)
 def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
         volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, hosted_zone: str, scalyr_key: str,
-        docker_image: str, sns_topic: str, sns_email: str, environment: list,
-        appdynamics_application: str):
-
+        no_termination_protection: bool, internal: bool, hosted_zone: str,
+        scalyr_key: str, appdynamics_application: str,
+        artifact_name: str, docker_image: str, environment: list,
+        sns_topic: str, sns_email: str):
 
     if not cluster_name:
         raise click.UsageError('You must specify the cluster name')
@@ -590,8 +585,16 @@ def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
     if internal and len(regions) > 1:
         raise click.UsageError('You can specify only one region when using --internal')
 
-    if internal:
-        region = regions[0]
+    if not docker_image:
+        if not artifact_name:
+            artifact_name = 'planb-cassandra-3'
+        image_version = get_latest_docker_image_version(artifact_name)
+        docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(artifact_name, image_version)
+        info('Using docker image: {}'.format(docker_image))
+    else:
+        if artifact_name:
+            raise click.UsageError('Conflicting options: --artifact-name and --docker-image cannot be specified at the same time')
+        image_version = docker_image.split(':')[-1]
 
     if environment:
         environment = dict(map(lambda x: x.split("="), environment))
