@@ -58,6 +58,7 @@ else
     exit 1
 fi
 
+
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/scylladb_template.yaml').read()))" > /etc/scylla/scylla.yaml
 
 if [ x"$SCYLLA_SMP" == "x" ];then
