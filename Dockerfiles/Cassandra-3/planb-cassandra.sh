@@ -3,7 +3,7 @@
 # LISTEN_ADDRESS
 # BROADCAST_ADDRESS
 # SNITCH
-# CASSANDRA_HOME
+# CASSANDRA_DATA_DIR
 # TRUSTSTORE
 # KEYSTORE
 # ADMIN_PASSWORD
@@ -47,10 +47,7 @@ else
 fi
 echo "Broadcast IP address is $BROADCAST_ADDRESS ..."
 
-export CASSANDRA_HOME=${CASSANDRA_HOME:-/var/lib/cassandra}
-
-# provide a symlink to lib from data volume
-ln -s /usr/share/cassandra/lib ${CASSANDRA_HOME}/lib
+export CASSANDRA_DATA_DIR=${CASSANDRA_DATA_DIR:-/var/lib/cassandra}
 
 if [ -z "$TRUSTSTORE" ]; then
     echo "TRUSTSTORE must be set (base64 encoded)."
