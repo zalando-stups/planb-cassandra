@@ -2,15 +2,18 @@
 Plan B Cassandra
 ================
 
-Bootstrap a multi-region Cassandra cluster on STUPS_/AWS with static Elastic IPs.
+Bootstrap a Cassandra cluster on STUPS_/AWS.
 
-The ``create-cluster.py`` script will start individual EC2 instances running Taupage_ & Docker
-in multiple AWS regions to form a Cassandra cluster with multi-region replication.
+The ``create_cluster.py`` script will start individual EC2 instances
+running Taupage_ & Docker with the latest Cassandra version 3.x
+(version 2.1 is still available, but not recommended).
+
+The setup can be either internal to a VPC or span multile AWS regions.
 
 Features:
 
-* fully-automated setup including Elastic IPs, EC2 security groups, SSL certs
-* multi-region replication (Ec2MultiRegionSnitch_)
+* fully-automated setup including Elastic IPs (when needed), EC2 security groups, SSL certs
+* multi-region replication available (using Ec2MultiRegionSnitch_)
 * encrypted inter-node communication (SSL/TLS)
 * `EC2 Auto Recovery`_ enabled
 * Jolokia_ agent to expose JMX metrics via HTTP
@@ -29,18 +32,29 @@ Prerequisites:
 * Python dependencies (``sudo pip3 install -r requirements.txt``)
 * Java 8 with ``keytool`` in your ``PATH`` (required to generate SSL certs)
 
-To create a cluster named "mycluster" in two regions with 3 nodes per region (default size):
+For example, to create a cluster named "mycluster" in the two regions
+with 3 nodes per region (the default size, enough for testing):
 
 .. code-block:: bash
 
     $ mai login  # get temporary AWS credentials
     $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
 
+The above example requires Elastic IPs to be allocated in every region.
+
+To create a cluster in a single region, using private IPs only, see
+the following example:
+
+.. code-block:: bash
+
+    $ ./create_cluster.py --cluster-name mycluster --internal eu-central-1
+
+
 Available options are::
 
     --cluster-name	Not actually an option, you must specify the name of a cluster to create
     --cluster-size	Number of nodes to create per AWS region.  Default: 3
-    --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.micro
+    --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.medium
     --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
     --volume-size	Size of EBS data volume in GB for every node.  Default: 8
     --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
@@ -63,9 +77,10 @@ to ``planb-cassandra-system-event``.  An SNS topic will be created (if
 it doesn't exist) in each of the specified regions.  If email is
 specified, then it will be subscribed to the topic.
 
-After allowing SSH access (TCP port 22) by changing the Security Group,
-you can use `Più`_ to get SSH access and create your application user and
-the first schema:
+It might be required to update the Security Group(s) to allow SSH
+access (TCP port 22) from Odd_ host.  After that is done, you can use
+`Più`_ to get SSH access and create your application user and the
+first schema:
 
 .. code-block:: bash
 
@@ -227,6 +242,7 @@ every node in order to free up the space that is still occupied by the
 data that the node is no longer responsible for.
 
 .. _STUPS: https://stups.io/
+.. _Odd: http://docs.stups.io/en/latest/components/odd.html
 .. _Taupage: http://docs.stups.io/en/latest/components/taupage.html
 .. _Ec2MultiRegionSnitch: http://docs.datastax.com/en/cassandra/2.1/cassandra/architecture/architectureSnitchEC2MultiRegion_c.html
 .. _EC2MultiRegionAddressTranslator: https://datastax.github.io/java-driver/manual/address_resolution/#ec2-multi-region

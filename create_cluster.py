@@ -556,7 +556,7 @@ either correct the error or retry.
 @click.command()
 @click.option('--cluster-name', help='name of the cluster, required')
 @click.option('--cluster-size', default=3, type=int, help='number of nodes per region, default: 3')
-@click.option('--instance-type', default='t2.micro', help='default: t2.micro')
+@click.option('--instance-type', default='t2.medium', help='default: t2.medium')
 @click.option('--volume-type', default='gp2', help='gp2 (default) | io1 | standard')
 @click.option('--volume-size', default=8, type=int, help='in GB, default: 8')
 @click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
