@@ -45,7 +45,7 @@ RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
 COPY planb-cassandra.sh /usr/local/bin/
 
 ENV HOME=/var/lib/cassandra
-WORKDIR /var/lib/cassandra
+WORKDIR $HOME
 
 CMD planb-cassandra.sh
 
