@@ -48,6 +48,9 @@ RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
 
 COPY planb-cassandra.sh /usr/local/bin/
 
-COPY scm-source.json /
+ENV HOME=/var/lib/cassandra
+WORKDIR /var/lib/cassandra
 
 CMD planb-cassandra.sh
+
+COPY scm-source.json /
