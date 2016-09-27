@@ -78,6 +78,10 @@ to ``planb-cassandra-system-event``.  An SNS topic will be created (if
 it doesn't exist) in each of the specified regions.  If email is
 specified, then it will be subscribed to the topic.
 
+If you use the Hosted Zone parameter, a full name specification is
+required e.g.: ``--hosted-zone myzone.example.com.`` (note the
+trailing dot.)
+
 It might be required to update the Security Group(s) to allow SSH
 access (TCP port 22) from Odd_ host.  After that is done, you can use
 `Più`_ to get SSH access and create your application user and the
