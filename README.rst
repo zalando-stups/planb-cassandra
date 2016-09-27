@@ -63,6 +63,7 @@ Available options are::
     --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
+    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3
     --docker-image	Override default Docker image.
     --environment, -e	Extend/override environment section of Taupage user data.
     --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
@@ -76,6 +77,10 @@ If only the email address is specified, then SNS topic name defaults
 to ``planb-cassandra-system-event``.  An SNS topic will be created (if
 it doesn't exist) in each of the specified regions.  If email is
 specified, then it will be subscribed to the topic.
+
+If you use the Hosted Zone parameter, a full name specification is
+required e.g.: ``--hosted-zone myzone.example.com.`` (note the
+trailing dot.)
 
 It might be required to update the Security Group(s) to allow SSH
 access (TCP port 22) from Odd_ host.  After that is done, you can use
@@ -161,7 +166,7 @@ to scale up EC2 instances or update Taupage AMI.
 
 For every node in the cluster, one by one:
 
-#. Stop a node (``nodetool stopdaemon``).
+#. Stop a node (``nodetool drain; nodetool stopdaemon``).
 #. Terminate EC2 instance, remember its IP.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
 #. Use the 'Launch More Like This' menu in AWS web console on one of the remaining nodes.
 #. Be sure to reuse the IP of the node you just terminated on the new node and to change the instance type (and/or pick a different Taupage AMI).

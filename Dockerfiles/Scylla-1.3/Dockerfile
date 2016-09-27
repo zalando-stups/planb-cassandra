@@ -1,4 +1,5 @@
-FROM ubuntu:16.04
+FROM registry.opensource.zalan.do/stups/ubuntu:16.04-48
+
 RUN apt-get update
 RUN apt-get install -y wget vim
 RUN wget -O /etc/apt/sources.list.d/scylla.list http://downloads.scylladb.com/deb/ubuntu/scylla-1.3-xenial.list
