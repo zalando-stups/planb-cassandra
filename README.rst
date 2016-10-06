@@ -54,6 +54,7 @@ Available options are::
 
     --cluster-name	Not actually an option, you must specify the name of a cluster to create
     --cluster-size	Number of nodes to create per AWS region.  Default: 3
+    --num-tokens        Number of vnodes per instance (see num_tokens).  Default: 256
     --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.medium
     --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
     --volume-size	Size of EBS data volume in GB for every node.  Default: 8
