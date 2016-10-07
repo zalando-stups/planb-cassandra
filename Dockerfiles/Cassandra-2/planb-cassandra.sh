@@ -1,5 +1,6 @@
 #!/bin/sh
 # CLUSTER_NAME
+# NUM_TOKENS
 # LISTEN_ADDRESS
 # BROADCAST_ADDRESS
 # SNITCH
@@ -80,6 +81,11 @@ fi
 # the same for concurrent_compactors setting:
 if [ -z "$CONCURRENT_COMPACTORS" ]; then
     export CONCURRENT_COMPACTORS=$ncores_4
+fi
+
+# NUM_TOKENS defaults to 256
+if [ -z "$NUM_TOKENS" ]; then
+    export NUM_TOKENS=256
 fi
 
 echo "Generating configuration from template ..."
