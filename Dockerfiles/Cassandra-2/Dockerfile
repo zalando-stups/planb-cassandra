@@ -46,6 +46,7 @@ COPY planb-cassandra.sh /usr/local/bin/
 
 ENV HOME=/var/lib/cassandra
 WORKDIR $HOME
+RUN echo "JVM_OPTS=-Duser.home=$HOME" >>/usr/share/cassandra/cassandra.in.sh
 
 CMD planb-cassandra.sh
 
