@@ -567,8 +567,9 @@ either correct the error or retry.
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
 @click.argument('regions', nargs=-1)
-def cli(cluster_name: str, regions: list, cluster_size: int, instance_type: str,
-        volume_type: str, volume_size: int, volume_iops: int,
+def cli(regions: list,
+        cluster_name: str, cluster_size: int, num_tokens: int,
+        instance_type: str, volume_type: str, volume_size: int, volume_iops: int,
         no_termination_protection: bool, internal: bool, hosted_zone: str,
         scalyr_key: str, appdynamics_application: str,
         artifact_name: str, docker_image: str, environment: list,
