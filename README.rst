@@ -256,3 +256,63 @@ data that the node is no longer responsible for.
 .. _Jolokia: https://jolokia.org/
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
+
+Upgrade your cluster from Cassandra 2.1 -> 3.7
+===================
+
+In order to upgrade your Cluster you should run the following steps.
+
+**Before you actually start, you should read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.**
+
+1. Check for the latest Cassandra version: 
+  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
+2. Connect to the instance where you want to run the upgrade and enter your docker conainter. 
+3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will speed up the upgrade process later on.
+4. Stop the docker container and remove it
+5. If you are running cassandra with the old folder structure where the data is directly located in __/var/lib/cassandra/__ do the following. **If not go on with step 6**. 
+  1.   Move all keyspaces to /var/lib/cassandra/data/data 
+  2. Move the folder  commit_logs to /var/lib/cassandra/data/commitlog 
+  3. Move the folder saved_caches to /var/lib/cassandra/data/ 
+  4. Set owner of data folders to application
+    Example:
+    ```
+    **Before Move**
+
+    /mounts/var/lib/cassandra$ ls
+    commit_logs  keysapce_1 saved_caches  system_auth  system_traces 
+
+
+    **After Move**
+
+    /mounts/var/lib/cassandra$ ls -la
+    total 28
+    drwxrwxrwx 4 application application  4096 Oct 10 12:21 .
+    drwxr-xr-x 3 root        root         4096 Aug 25 13:27 ..
+    drwxrwxr-x 5 application mpickhan     4096 Oct 10 12:21 data
+
+    /mounts/var/lib/cassandra$ ls -la data/
+    total 36
+    drwxrwxr-x 5 application mpickhan     4096 Oct 10 12:21 .
+    drwxrwxrwx 4 application application  4096 Oct 10 12:21 ..
+    drwxr-xr-x 2 application root        20480 Oct 10 12:15 commitlog
+    drwxrwxr-x 9 application mpickhan     4096 Oct 10 12:19 data
+    drwxr-xr-x 2 application root         4096 Oct 10 10:52 saved_caches
+
+    /mounts/var/lib/cassandra$ ls -la data/data/
+    total 36
+    drwxrwxr-x  9 application mpickhan 4096 Oct 10 12:19 .
+    drwxrwxr-x  5 application mpickhan 4096 Oct 10 12:21 ..
+    drwxr-xr-x 10 application root     4096 Aug 25 14:29 keysapce_1
+    drwxr-xr-x 19 application root     4096 Aug 25 13:27 system
+    drwxr-xr-x  5 application root     4096 Aug 25 13:27 system_auth
+    drwxr-xr-x  4 application root     4096 Aug 25 13:27 system_traces
+    ```
+6. Stop the ec2-Instance and change the user details `Go to Actions -> Instance Settings -> View/Change User Details` Change the "source" entry to the version you want to upgrade to:
+    ```
+    Example:
+
+    From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
+    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3:cd95"
+    ```
+7. Start the instance and connect to it. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`. Check the logs for errors and warnings
+8. Proceed with each node in your cluster.
