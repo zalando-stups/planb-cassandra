@@ -260,14 +260,15 @@ data that the node is no longer responsible for.
 Upgrade your cluster from Cassandra 2.1 -> 3.7
 ===================
 
-In order to upgrade your Cluster you should run the following steps.
+In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
+After upgrading the last node in your cluster you are done.
 
 **Before you actually start, you should read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.**
 
 1. Check for the latest Cassandra version: 
   `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
-2. Connect to the instance where you want to run the upgrade and enter your docker conainter. 
-3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will speed up the upgrade process later on.
+2. Connect to the instance where you want to run the upgrade and enter your docker container. 
+3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
 4. Stop the docker container and remove it
 5. If you are running cassandra with the old folder structure where the data is directly located in __/var/lib/cassandra/__ do the following. **If not go on with step 6**. 
   1.   Move all keyspaces to /var/lib/cassandra/data/data 
@@ -279,7 +280,7 @@ In order to upgrade your Cluster you should run the following steps.
     **Before Move**
 
     /mounts/var/lib/cassandra$ ls
-    commit_logs  keysapce_1 saved_caches  system_auth  system_traces 
+    commit_logs  keyspace_1 saved_caches  system_auth  system_traces 
 
 
     **After Move**
@@ -302,12 +303,13 @@ In order to upgrade your Cluster you should run the following steps.
     total 36
     drwxrwxr-x  9 application mpickhan 4096 Oct 10 12:19 .
     drwxrwxr-x  5 application mpickhan 4096 Oct 10 12:21 ..
-    drwxr-xr-x 10 application root     4096 Aug 25 14:29 keysapce_1
+    drwxr-xr-x 10 application root     4096 Aug 25 14:29 keyspace_1
     drwxr-xr-x 19 application root     4096 Aug 25 13:27 system
     drwxr-xr-x  5 application root     4096 Aug 25 13:27 system_auth
     drwxr-xr-x  4 application root     4096 Aug 25 13:27 system_traces
     ```
-6. Stop the ec2-Instance and change the user details `Go to Actions -> Instance Settings -> View/Change User Details` Change the "source" entry to the version you want to upgrade to:
+6. **Stop** the ec2-Instance and change the user details `Go to Actions -> Instance Settings -> View/Change User Details` Change the "source" entry to the version you want to upgrade to:
+    ** Important: ** Use the stop command and _not_ terminate.
     ```
     Example:
 
