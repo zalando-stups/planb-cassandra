@@ -257,7 +257,7 @@ data that the node is no longer responsible for.
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
 
-Upgrade your cluster from Cassandra 2.1 -> 3.7
+Upgrade your cluster from Cassandra 2.1 -> 3.x
 ===================
 
 In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
@@ -265,15 +265,15 @@ After upgrading the last node in your cluster you are done.
 
 **Before you actually start, you should read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.**
 
-1. Check for the latest Cassandra version: 
+1. Check for the latest Plan-B Cassandra image version: 
   `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
 2. Connect to the instance where you want to run the upgrade and enter your docker container. 
 3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
 4. Stop the docker container and remove it
-5. If you are running cassandra with the old folder structure where the data is directly located in __/var/lib/cassandra/__ do the following. **If not go on with step 6**. 
-  1.   Move all keyspaces to /var/lib/cassandra/data/data 
-  2. Move the folder  commit_logs to /var/lib/cassandra/data/commitlog 
-  3. Move the folder saved_caches to /var/lib/cassandra/data/ 
+5. If you are running cassandra with the old folder structure where the data is directly located in __mounts/var/lib/cassandra/__ do the following. **If not go on with step 6**. 
+  1. Move all keyspaces to __/mounts/var/lib/cassandra/data/data__
+  2. Move the folder  commit_logs to __/mounts/var/lib/cassandra/data/commitlog__ 
+  3. Move the folder saved_caches to __/mounts/var/lib/cassandra/data/__
   4. Set owner of data folders to application
     Example:
     ```
