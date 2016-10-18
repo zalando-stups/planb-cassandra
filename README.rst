@@ -263,7 +263,10 @@ Upgrade your cluster from Cassandra 2.1 -> 3.x
 In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
 After upgrading the last node in your cluster you are done.
 
-**Before you actually start, you should read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.**
+**Disclaimer: Before you actually start, you should:**
+  1. Read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.
+  2. Check if your client applications driver actually support V4 of the cql-protocol
+
 
 1. Check for the latest Plan-B Cassandra image version: 
   `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
