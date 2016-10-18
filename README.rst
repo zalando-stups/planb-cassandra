@@ -275,13 +275,14 @@ After upgrading the last node in your cluster you are done.
    Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
 4. Stop the docker container and remove it
   ```
-    Inside the container:
+    **Inside the container:**
       nodetool stopdaemon
-    On the host:
+
+    **On the host:**
       docker stop taupageapp
       docker rm taupageapp
   ```
-5. If you are running cassandra with the old folder structure where the data is directly located in __mounts/var/lib/cassandra/__ do the following. **If not go on with step 6**. 
+5. If you are running cassandra with the old folder structure where the data is directly located in __mounts/var/lib/cassandra/__ do the following. **If not go on with step 6.** 
   1. Move all keyspaces to __/mounts/var/lib/cassandra/data/data__
   2. Move the folder  commit_logs to __/mounts/var/lib/cassandra/data/commitlog__ 
   3. Move the folder saved_caches to __/mounts/var/lib/cassandra/data/__
@@ -320,7 +321,7 @@ After upgrading the last node in your cluster you are done.
     drwxr-xr-x  4 application root     4096 Aug 25 13:27 system_traces
     ```
 6. **Stop** the ec2-Instance and change the user details `Go to Actions -> Instance Settings -> View/Change User Details` Change the "source" entry to the version you want to upgrade to:
-    ** Important: ** Use the stop command and _not_ terminate.
+    **Important:** Use the stop command and __not__ terminate.
     ```
     Example:
 
