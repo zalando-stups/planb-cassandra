@@ -273,15 +273,7 @@ After upgrading the last node in your cluster you are done.
 2. Connect to the instance where you want to run the upgrade and enter your docker container. 
 3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
    Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
-4. Stop the docker container and remove it
-  ```
-    **Inside the container:**
-      nodetool stopdaemon
-
-    **On the host:**
-      docker stop taupageapp
-      docker rm taupageapp
-  ```
+4. Remove the docker container by running on the host `docker rm -f taupageapp`
 5. If you are running cassandra with the old folder structure where the data is directly located in __mounts/var/lib/cassandra/__ do the following. **If not go on with step 6.** 
   1. Move all keyspaces to __/mounts/var/lib/cassandra/data/data__
   2. Move the folder  commit_logs to __/mounts/var/lib/cassandra/data/commitlog__ 
