@@ -319,5 +319,6 @@ After upgrading the last node in your cluster you are done.
     From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
     To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3:cd95"
     ```
-7. Start the instance and connect to it. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`. Check the logs for errors and warnings
+7. Start the instance and connect to it. At this point your node should be working and serving reads and writes. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`.
+   Check the logs for errors and warnings. (__Note:__ For the size of ~12GB SSTables it takes approximately one hour to convert them to the new format.)
 8. Proceed with each node in your cluster.
