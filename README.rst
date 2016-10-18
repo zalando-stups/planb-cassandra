@@ -271,7 +271,8 @@ After upgrading the last node in your cluster you are done.
 1. Check for the latest Plan-B Cassandra image version: 
   `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
 2. Connect to the instance where you want to run the upgrade and enter your docker container. 
-3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.* Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running 'nodetool drain.`
+3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
+   Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
 4. Stop the docker container and remove it
   ```
     Inside the container:
