@@ -57,7 +57,7 @@ Available options are::
     --num-tokens	Number of virtual nodes per node.  Default: 256
     --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.medium
     --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
-    --volume-size	Size of EBS data volume in GB for every node.  Default: 8
+    --volume-size	Size of EBS data volume in GB for every node.  Default: 16
     --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
     --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
     --internal		Deploy the cluster within one region, using private IPs only.
