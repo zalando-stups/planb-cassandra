@@ -354,9 +354,17 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
-            'appdynamics_application': options['appdynamics_application'] or options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
+
+    app_name = options['appdynamics_application']
+    if app_name is None:
+        data['appdynamics_application'] = options['cluster_name']
+    elif app_name:
+        data['appdynamics_application'] = app_name
+    else:
+        # it must be an empty string then: don't set anything in user data
+        pass
 
     if options['environment']:
         data['environment'].update(options['environment'])
