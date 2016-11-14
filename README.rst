@@ -57,7 +57,7 @@ Available options are::
     --num-tokens	Number of virtual nodes per node.  Default: 256
     --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.medium
     --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
-    --volume-size	Size of EBS data volume in GB for every node.  Default: 8
+    --volume-size	Size of EBS data volume in GB for every node.  Default: 16
     --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
     --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
     --internal		Deploy the cluster within one region, using private IPs only.
@@ -256,3 +256,70 @@ data that the node is no longer responsible for.
 .. _Jolokia: https://jolokia.org/
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
+
+Upgrade your cluster from Cassandra 2.1 -> 3.x
+===================
+
+In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
+After upgrading the last node in your cluster you are done.
+
+**Disclaimer: Before you actually start, you should:**
+  1. Read the [Datastax guide](https://docs.datastax.com/en/latest-upgrade/upgrade/cassandra/upgrdCassandraDetails.html) and consider the upgrade restrictions.
+  2. Check if your client applications driver actually support V4 of the cql-protocol
+
+
+1. Check for the latest Plan-B Cassandra image version: 
+  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
+2. Connect to the instance where you want to run the upgrade and enter your docker container. 
+3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
+   Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
+4. Remove the docker container by running on the host `docker rm -f taupageapp`
+5. If you are running cassandra with the old folder structure where the data is directly located in __mounts/var/lib/cassandra/__ do the following. **If not go on with step 6.** 
+  1. Move all keyspaces to __/mounts/var/lib/cassandra/data/data__
+  2. Move the folder  commit_logs to __/mounts/var/lib/cassandra/data/commitlog__ 
+  3. Move the folder saved_caches to __/mounts/var/lib/cassandra/data/__
+  4. Set owner of data folders to application
+    Example:
+    ```
+    **Before Move**
+
+    /mounts/var/lib/cassandra$ ls
+    commit_logs  keyspace_1 saved_caches  system_auth  system_traces 
+
+
+    **After Move**
+
+    /mounts/var/lib/cassandra$ ls -la
+    total 28
+    drwxrwxrwx 4 application application  4096 Oct 10 12:21 .
+    drwxr-xr-x 3 root        root         4096 Aug 25 13:27 ..
+    drwxrwxr-x 5 application mpickhan     4096 Oct 10 12:21 data
+
+    /mounts/var/lib/cassandra$ ls -la data/
+    total 36
+    drwxrwxr-x 5 application mpickhan     4096 Oct 10 12:21 .
+    drwxrwxrwx 4 application application  4096 Oct 10 12:21 ..
+    drwxr-xr-x 2 application root        20480 Oct 10 12:15 commitlog
+    drwxrwxr-x 9 application mpickhan     4096 Oct 10 12:19 data
+    drwxr-xr-x 2 application root         4096 Oct 10 10:52 saved_caches
+
+    /mounts/var/lib/cassandra$ ls -la data/data/
+    total 36
+    drwxrwxr-x  9 application mpickhan 4096 Oct 10 12:19 .
+    drwxrwxr-x  5 application mpickhan 4096 Oct 10 12:21 ..
+    drwxr-xr-x 10 application root     4096 Aug 25 14:29 keyspace_1
+    drwxr-xr-x 19 application root     4096 Aug 25 13:27 system
+    drwxr-xr-x  5 application root     4096 Aug 25 13:27 system_auth
+    drwxr-xr-x  4 application root     4096 Aug 25 13:27 system_traces
+    ```
+6. **Stop** the ec2-Instance and change the user details `Go to Actions -> Instance Settings -> View/Change User Details` Change the "source" entry to the version you want to upgrade to:
+    **Important:** Use the stop command and __not__ terminate.
+    ```
+    Example:
+
+    From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
+    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3:cd95"
+    ```
+7. Start the instance and connect to it. At this point your node should be working and serving reads and writes. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`.
+   Check the logs for errors and warnings. (__Note:__ For the size of ~12GB SSTables it takes approximately one hour to convert them to the new format.)
+8. Proceed with each node in your cluster.
