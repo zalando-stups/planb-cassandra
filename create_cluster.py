@@ -21,10 +21,10 @@ import copy
 import netaddr
 
 
-def setup_security_groups(internal: bool, cluster_name: str, node_ips: dict,
+def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
                           result: dict) -> dict:
     '''
-    Allow traffic between regions (or within a VPC, if `internal' is True)
+    Allow traffic between regions (or within a VPC, if `use_dmz' is False)
     '''
     for region, ips in node_ips.items():
         with Action('Configuring Security Group in {}..'.format(region)):
@@ -42,7 +42,7 @@ def setup_security_groups(internal: bool, cluster_name: str, node_ips: dict,
                             Tags=[{'Key': 'Name', 'Value': sg_name}])
 
             ip_permissions = []
-            if not internal:
+            if use_dmz:
                 # NOTE: we need to allow ALL public IPs (from all regions)
                 for ip in itertools.chain(*node_ips.values()):
                     ip_permissions.append({
@@ -342,7 +342,7 @@ def generate_taupage_user_data(options: dict) -> str:
                 'CLUSTER_SIZE': options['cluster_size'],
                 'NUM_TOKENS': options['num_tokens'],
                 'REGIONS': ' '.join(options['regions']),
-                'SUBNET_TYPE': 'internal' if options['internal'] else 'dmz',
+                'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
                 'SEEDS': ','.join(all_seeds),
                 'KEYSTORE': keystore_base64,
                 'TRUSTSTORE': truststore_base64,
@@ -444,7 +444,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
             time.sleep(5)
             act.progress()
 
-        if not options['internal']:
+        if options['use_dmz']:
             ec2.associate_address(InstanceId=instance_id,
                                   AllocationId=ip['AllocationId'])
 
@@ -557,7 +557,7 @@ either correct the error or retry.
 @click.option('--volume-size', default=16, type=int, help='in GB, default: 16')
 @click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
 @click.option('--no-termination-protection', is_flag=True, default=False)
-@click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
+@click.option('--use-dmz', is_flag=True, default=False, help='deploy into DMZ subnets using Public IP addresses')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
@@ -570,7 +570,7 @@ either correct the error or retry.
 def cli(regions: list,
         cluster_name: str, cluster_size: int, num_tokens: int,
         instance_type: str, volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, hosted_zone: str,
+        no_termination_protection: bool, use_dmz: bool, hosted_zone: str,
         scalyr_key: str, appdynamics_application: str,
         artifact_name: str, docker_image: str, environment: list,
         sns_topic: str, sns_email: str):
@@ -585,8 +585,8 @@ def cli(regions: list,
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
-    if internal and len(regions) > 1:
-        raise click.UsageError('You can specify only one region when using --internal')
+    if len(regions) > 1 and not(use_dmz):
+        raise click.UsageError('You must specify --use-dmz when deploying multi-region.')
 
     if not docker_image:
         if not artifact_name:
@@ -616,10 +616,10 @@ def cli(regions: list,
     try:
         taupage_amis = find_taupage_amis(regions)
 
-        subnets = get_subnets('internal-' if internal else 'dmz-', regions)
+        subnets = get_subnets('dmz-' if use_dmz else 'internal-', regions)
 
         allocate_ip_addresses(subnets, cluster_size, node_ips,
-                              take_elastic_ips=not(internal))
+                              take_elastic_ips=use_dmz)
 
         if sns_topic or sns_email:
             alarm_topics = setup_sns_topics_for_alarm(regions, sns_topic, sns_email)
@@ -629,7 +629,7 @@ def cli(regions: list,
         if hosted_zone:
             setup_dns_records(cluster_name, hosted_zone, node_ips)
 
-        setup_security_groups(internal, cluster_name, node_ips, security_groups)
+        setup_security_groups(use_dmz, cluster_name, node_ips, security_groups)
 
         # We should have up to 3 seeds nodes per DC
         seed_count = min(cluster_size, 3)
@@ -653,7 +653,7 @@ def cli(regions: list,
             info('Cleaning up security group: {}'.format(sg['GroupId']))
             ec2.delete_security_group(GroupId=sg['GroupId'])
 
-        if not internal:
+        if use_dmz:
             for region, ips in node_ips.items():
                 ec2 = boto3.client('ec2', region)
                 for ip in ips:
