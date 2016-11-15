@@ -561,8 +561,8 @@ either correct the error or retry.
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
-@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3)')
-@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3)')
+@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
+@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
 @click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
@@ -590,7 +590,7 @@ def cli(regions: list,
 
     if not docker_image:
         if not artifact_name:
-            artifact_name = 'planb-cassandra-3'
+            artifact_name = 'planb-cassandra-3.0'
         image_version = get_latest_docker_image_version(artifact_name)
         docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(artifact_name, image_version)
         info('Using docker image: {}'.format(docker_image))
