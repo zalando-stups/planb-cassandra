@@ -9,7 +9,7 @@ ENV CASSIE_VERSION=30x
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN echo "deb http://www.apache.org/dist/cassandra/debian ${CASSIE_VERSION} main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
-RUN gpg --keyserver pgp.mit.edu --recv-keys 0353B12C && gpg --export --armor 0353B12C | apt-key add -
+RUN curl https://www.apache.org/dist/cassandra/KEYS | apt-key add -
 
 RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
 RUN apt-get -y install vim less sysstat cassandra && \
