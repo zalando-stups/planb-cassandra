@@ -38,7 +38,7 @@ with 3 nodes per region (the default size, enough for testing):
 .. code-block:: bash
 
     $ mai login  # get temporary AWS credentials
-    $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
+    $ ./create_cluster.py --cluster-name mycluster --use-dmz eu-west-1 eu-central-1
 
 The above example requires Elastic IPs to be allocated in every region.
 
@@ -47,8 +47,12 @@ the following example:
 
 .. code-block:: bash
 
-    $ ./create_cluster.py --cluster-name mycluster --internal eu-central-1
+    $ ./create_cluster.py --cluster-name mycluster eu-central-1
 
+It is possible to use Public IPs even with a single region, for
+example, if your application(s) connect from different VPC(s).  This
+is currently **not recommended**, though, as there is no provision for
+client-to-server encryption.
 
 Available options are::
 
@@ -60,7 +64,7 @@ Available options are::
     --volume-size	Size of EBS data volume in GB for every node.  Default: 16
     --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
     --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
-    --internal		Deploy the cluster within one region, using private IPs only.
+    --use-dmz		Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
     --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
