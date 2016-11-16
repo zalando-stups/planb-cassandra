@@ -5,8 +5,9 @@ Plan B Cassandra
 Bootstrap a Cassandra cluster on STUPS_/AWS.
 
 The ``create_cluster.py`` script will start individual EC2 instances
-running Taupage_ & Docker with the latest Cassandra version 3.x
-(version 2.1 is still available, but not recommended).
+running Taupage_ & Docker with the latest Cassandra version 3.0.x (the
+new 'tick-tock' releases 3.x and older version 2.1 are still
+available, but not recommended).
 
 The setup can be either internal to a VPC or span multile AWS regions.
 
@@ -68,7 +69,7 @@ Available options are::
     --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
-    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3
+    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3.0
     --docker-image	Override default Docker image.
     --environment, -e	Extend/override environment section of Taupage user data.
     --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
@@ -261,7 +262,7 @@ data that the node is no longer responsible for.
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
 
-Upgrade your cluster from Cassandra 2.1 -> 3.x
+Upgrade your cluster from Cassandra 2.1 -> 3.0.x
 ===================
 
 In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
@@ -273,7 +274,7 @@ After upgrading the last node in your cluster you are done.
 
 
 1. Check for the latest Plan-B Cassandra image version: 
-  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
+  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3.0/tags | jq '.[-1].name'`
 2. Connect to the instance where you want to run the upgrade and enter your docker container. 
 3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
    Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
@@ -322,7 +323,7 @@ After upgrading the last node in your cluster you are done.
     Example:
 
     From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
-    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3:cd95"
+    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd105"
     ```
 7. Start the instance and connect to it. At this point your node should be working and serving reads and writes. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`.
    Check the logs for errors and warnings. (__Note:__ For the size of ~12GB SSTables it takes approximately one hour to convert them to the new format.)
