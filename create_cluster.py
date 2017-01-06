@@ -348,6 +348,9 @@ def generate_taupage_user_data(options: dict) -> str:
                 'TRUSTSTORE': truststore_base64,
                 'ADMIN_PASSWORD': generate_password()
             },
+            'volumes': {
+                'ebs': {
+                    '/dev/xvdf': None}}
             'mounts': {
                 '/var/lib/cassandra': {
                     'partition': '/dev/xvdf',
@@ -363,8 +366,23 @@ def generate_taupage_user_data(options: dict) -> str:
 
     return data
 
+def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
+    ebs_data = {
+        "AvailabilityZone": zone,
+        "VolumenType": options['volume_type'],
+        "Size": options['volume_size'],
+        "Encrypted": False,}
+    if options['volume_type'] == 'io1':
+        ebs_data['Iops'] = options['volume_iops']
+    vol = ec2.create_volume(**ebs_data)
 
-def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
+    tags = [{'Key': 'Name',
+             'Value': name},
+            {'Key': 'Taupage:erase-on-boot',
+             'Value': 'True'}]
+    ec2.create_tags(Resources=[vol['VolumeId']], Tags=tags)
+
+def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
                     security_group_id: str, is_seed: bool, options: dict):
 
     node_type = 'SEED' if is_seed else 'NORMAL'
@@ -399,31 +417,21 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                 block_devices.append({'DeviceName': bd['DeviceName'],
                                       'NoDevice': ''})
 
-        #
-        # Make sure our data EBS volume is persisted, but NOT
-        # encrypted: the latter will prevent auto-recovery.
-        #
-        data_ebs = {'VolumeType': options['volume_type'],
-                    'VolumeSize': options['volume_size'],
-                    'DeleteOnTermination': False,
-                    'Encrypted': False}
-        if options['volume_type'] == 'io1':
-            data_ebs['Iops'] = options['volume_iops']
+        volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
+        create_tagged_volume(ec2, options, subnet['AvailabilityZone'], volume_name)
 
-        #
-        # Now add the data EBS with pre-defined device name (it is
-        # referred to in Taupage user data).
-        #
-        block_devices.append({'DeviceName': '/dev/xvdf', 'Ebs': data_ebs})
+        user_data = options['user_data']
+        user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
+        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
         resp = ec2.run_instances(
             ImageId=ami.id,
             MinCount=1,
             MaxCount=1,
             SecurityGroupIds=[security_group_id],
-            UserData=options['taupage_user_data'],
+            UserData=taupage_user_data,
             InstanceType=options['instance_type'],
-            SubnetId=subnet_id,
+            SubnetId=subnet['SubnetId'],
             PrivateIpAddress=ip['PrivateIp'],
             BlockDeviceMappings=block_devices,
             DisableApiTermination=not(options['no_termination_protection']))
@@ -483,7 +491,7 @@ def launch_seed_nodes(options: dict):
         for i, ip in enumerate(ips):
             launch_instance(region, ip,
                             ami=options['taupage_amis'][region],
-                            subnet_id=subnets[i % len(subnets)]['SubnetId'],
+                            subnet_id=subnets[i % len(subnets)],
                             security_group_id=options['security_groups'][region]['GroupId'],
                             is_seed=True,
                             options=options)
@@ -504,7 +512,7 @@ def launch_normal_nodes(options: dict):
                 time.sleep(60)
                 launch_instance(region, ip,
                                 ami=options['taupage_amis'][region],
-                                subnet_id=subnets[i % len(subnets)]['SubnetId'],
+                                subnet_id=subnets[i % len(subnets)],
                                 security_group_id=options['security_groups'][region]['GroupId'],
                                 is_seed=False,
                                 options=options)
@@ -636,7 +644,6 @@ def cli(regions: list,
         seed_nodes = pick_seed_node_ips(node_ips, seed_count)
 
         user_data = generate_taupage_user_data(locals())
-        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
         launch_seed_nodes(locals())
 
