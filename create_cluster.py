@@ -350,7 +350,9 @@ def generate_taupage_user_data(options: dict) -> str:
             },
             'volumes': {
                 'ebs': {
-                    '/dev/xvdf': None}}
+                    '/dev/xvdf': None
+                }
+            },
             'mounts': {
                 '/var/lib/cassandra': {
                     'partition': '/dev/xvdf',
@@ -369,7 +371,7 @@ def generate_taupage_user_data(options: dict) -> str:
 def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
     ebs_data = {
         "AvailabilityZone": zone,
-        "VolumenType": options['volume_type'],
+        "VolumeType": options['volume_type'],
         "Size": options['volume_size'],
         "Encrypted": False,}
     if options['volume_type'] == 'io1':
@@ -491,7 +493,7 @@ def launch_seed_nodes(options: dict):
         for i, ip in enumerate(ips):
             launch_instance(region, ip,
                             ami=options['taupage_amis'][region],
-                            subnet_id=subnets[i % len(subnets)],
+                            subnet=subnets[i % len(subnets)],
                             security_group_id=options['security_groups'][region]['GroupId'],
                             is_seed=True,
                             options=options)
@@ -512,7 +514,7 @@ def launch_normal_nodes(options: dict):
                 time.sleep(60)
                 launch_instance(region, ip,
                                 ami=options['taupage_amis'][region],
-                                subnet_id=subnets[i % len(subnets)],
+                                subnet=subnets[i % len(subnets)],
                                 security_group_id=options['security_groups'][region]['GroupId'],
                                 is_seed=False,
                                 options=options)
