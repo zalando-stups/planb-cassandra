@@ -20,11 +20,6 @@ import sys
 import copy
 import netaddr
 
-def get_account_id():
-    sts = boto3.client('sts')
-    resp = sts.get_caller_identity()
-    return resp['Account']
-
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
                           result: dict) -> dict:
     '''
@@ -372,7 +367,7 @@ def generate_taupage_user_data(options: dict) -> str:
 
     return data
 
-def create_instance_profile(cluster_name: str, region: str):
+def create_instance_profile(cluster_name: str):
     profile_name = 'profile-{}'.format(cluster_name)
     role_name = 'role-{}'.format(cluster_name)
     policy_name = 'policy-{}-datavolume'.format(cluster_name)
@@ -392,23 +387,28 @@ def create_instance_profile(cluster_name: str, region: str):
         }]
     }""")
 
-    policy_document = """{{
+    policy_document = """{
         "Version": "2012-10-17",
         "Statement": [
-            {{
+            {
                 "Effect": "Allow",
                 "Action": [
                     "ec2:DescribeTags",
                     "ec2:DeleteTags",
+                    "ec2:DescribeVolumes",
                     "ec2:AttachVolume"
                 ],
-                "Resource": "arn:aws:ec2:{region}:{account_id}:volume/*",
-                "Condition": {{"StringLike": {{"ec2:ResourceTag/Name": "{name_tag_pattern}"}}}}
-            }}
+                "Resource": "*"
+            }
         ]
-    }}""".format(region=region, account_id=get_account_id(), name_tag_pattern=name_tag_pattern)
-    iam.put_role_policy(RoleName=role_name, PolicyName=policy_name, PolicyDocument=policy_document)
-    iam.add_role_to_instance_profile(InstanceProfileName=profile_name, RoleName=role_name)
+    }"""
+    iam.put_role_policy(RoleName=role_name,
+                        PolicyName=policy_name,
+                        PolicyDocument=policy_document)
+
+    iam.add_role_to_instance_profile(InstanceProfileName=profile_name,
+                                     RoleName=role_name)
+
     return profile['InstanceProfile']
 
 def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
@@ -691,7 +691,15 @@ def cli(regions: list,
 
         user_data = generate_taupage_user_data(locals())
 
-        instance_profile = create_instance_profile(cluster_name, 'eu-central-1')
+        instance_profile = create_instance_profile(cluster_name)
+        #
+        # FIXME: using an instance profile right after creating one
+        # can result in 'not found' error, because of eventual
+        # consistency.  For now fix with a sleep, should rather
+        # examine exception and retry after some delay.
+        #
+        time.sleep(30)
+
         launch_seed_nodes(locals())
 
         # TODO: make sure all seed nodes are up
