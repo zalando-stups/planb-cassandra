@@ -510,12 +510,6 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
             ec2.associate_address(InstanceId=instance_id,
                                   AllocationId=ip['AllocationId'])
 
-        # tag the attached data EBS volume for easier cleanup when testing
-        for bd in instance['BlockDeviceMappings']:
-            if bd['DeviceName'] == '/dev/xvdf':
-                ec2.create_tags(Resources=[bd['Ebs']['VolumeId']],
-                                Tags=[{'Key': 'Name', 'Value': options['cluster_name']}])
-
         # add an auto-recovery alarm for this instance
         cw = boto3.client('cloudwatch', region_name=region)
         alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
