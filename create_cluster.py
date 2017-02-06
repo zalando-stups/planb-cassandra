@@ -20,11 +20,10 @@ import sys
 import copy
 import netaddr
 
-
-def setup_security_groups(internal: bool, cluster_name: str, node_ips: dict,
+def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
                           result: dict) -> dict:
     '''
-    Allow traffic between regions (or within a VPC, if `internal' is True)
+    Allow traffic between regions (or within a VPC, if `use_dmz' is False)
     '''
     for region, ips in node_ips.items():
         with Action('Configuring Security Group in {}..'.format(region)):
@@ -42,7 +41,7 @@ def setup_security_groups(internal: bool, cluster_name: str, node_ips: dict,
                             Tags=[{'Key': 'Name', 'Value': sg_name}])
 
             ip_permissions = []
-            if not internal:
+            if use_dmz:
                 # NOTE: we need to allow ALL public IPs (from all regions)
                 for ip in itertools.chain(*node_ips.values()):
                     ip_permissions.append({
@@ -342,11 +341,16 @@ def generate_taupage_user_data(options: dict) -> str:
                 'CLUSTER_SIZE': options['cluster_size'],
                 'NUM_TOKENS': options['num_tokens'],
                 'REGIONS': ' '.join(options['regions']),
-                'SUBNET_TYPE': 'internal' if options['internal'] else 'dmz',
+                'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
                 'SEEDS': ','.join(all_seeds),
                 'KEYSTORE': keystore_base64,
                 'TRUSTSTORE': truststore_base64,
                 'ADMIN_PASSWORD': generate_password()
+            },
+            'volumes': {
+                'ebs': {
+                    '/dev/xvdf': None
+                }
             },
             'mounts': {
                 '/var/lib/cassandra': {
@@ -371,8 +375,67 @@ def generate_taupage_user_data(options: dict) -> str:
 
     return data
 
+def create_instance_profile(cluster_name: str):
+    profile_name = 'profile-{}'.format(cluster_name)
+    role_name = 'role-{}'.format(cluster_name)
+    policy_name = 'policy-{}-datavolume'.format(cluster_name)
+    name_tag_pattern = '{}-*'.format(cluster_name)
 
-def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
+    iam = boto3.client('iam')
+    profile = iam.create_instance_profile(InstanceProfileName=profile_name)
+
+    role = iam.create_role(RoleName=role_name, AssumeRolePolicyDocument="""{
+        "Version": "2012-10-17",
+        "Statement": [{
+             "Action": "sts:AssumeRole",
+             "Effect": "Allow",
+             "Principal": {
+                 "Service": "ec2.amazonaws.com"
+             }
+        }]
+    }""")
+
+    policy_document = """{
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:DescribeTags",
+                    "ec2:DeleteTags",
+                    "ec2:DescribeVolumes",
+                    "ec2:AttachVolume"
+                ],
+                "Resource": "*"
+            }
+        ]
+    }"""
+    iam.put_role_policy(RoleName=role_name,
+                        PolicyName=policy_name,
+                        PolicyDocument=policy_document)
+
+    iam.add_role_to_instance_profile(InstanceProfileName=profile_name,
+                                     RoleName=role_name)
+
+    return profile['InstanceProfile']
+
+def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
+    ebs_data = {
+        "AvailabilityZone": zone,
+        "VolumeType": options['volume_type'],
+        "Size": options['volume_size'],
+        "Encrypted": False,}
+    if options['volume_type'] == 'io1':
+        ebs_data['Iops'] = options['volume_iops']
+    vol = ec2.create_volume(**ebs_data)
+
+    tags = [{'Key': 'Name',
+             'Value': name},
+            {'Key': 'Taupage:erase-on-boot',
+             'Value': 'True'}]
+    ec2.create_tags(Resources=[vol['VolumeId']], Tags=tags)
+
+def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
                     security_group_id: str, is_seed: bool, options: dict):
 
     node_type = 'SEED' if is_seed else 'NORMAL'
@@ -407,33 +470,24 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
                 block_devices.append({'DeviceName': bd['DeviceName'],
                                       'NoDevice': ''})
 
-        #
-        # Make sure our data EBS volume is persisted, but NOT
-        # encrypted: the latter will prevent auto-recovery.
-        #
-        data_ebs = {'VolumeType': options['volume_type'],
-                    'VolumeSize': options['volume_size'],
-                    'DeleteOnTermination': False,
-                    'Encrypted': False}
-        if options['volume_type'] == 'io1':
-            data_ebs['Iops'] = options['volume_iops']
+        volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
+        create_tagged_volume(ec2, options, subnet['AvailabilityZone'], volume_name)
 
-        #
-        # Now add the data EBS with pre-defined device name (it is
-        # referred to in Taupage user data).
-        #
-        block_devices.append({'DeviceName': '/dev/xvdf', 'Ebs': data_ebs})
+        user_data = options['user_data']
+        user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
+        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
         resp = ec2.run_instances(
             ImageId=ami.id,
             MinCount=1,
             MaxCount=1,
             SecurityGroupIds=[security_group_id],
-            UserData=options['taupage_user_data'],
+            UserData=taupage_user_data,
             InstanceType=options['instance_type'],
-            SubnetId=subnet_id,
+            SubnetId=subnet['SubnetId'],
             PrivateIpAddress=ip['PrivateIp'],
             BlockDeviceMappings=block_devices,
+            IamInstanceProfile={'Arn': options['instance_profile']['Arn']},
             DisableApiTermination=not(options['no_termination_protection']))
 
         instance = resp['Instances'][0]
@@ -452,7 +506,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet_id: str,
             time.sleep(5)
             act.progress()
 
-        if not options['internal']:
+        if options['use_dmz']:
             ec2.associate_address(InstanceId=instance_id,
                                   AllocationId=ip['AllocationId'])
 
@@ -491,7 +545,7 @@ def launch_seed_nodes(options: dict):
         for i, ip in enumerate(ips):
             launch_instance(region, ip,
                             ami=options['taupage_amis'][region],
-                            subnet_id=subnets[i % len(subnets)]['SubnetId'],
+                            subnet=subnets[i % len(subnets)],
                             security_group_id=options['security_groups'][region]['GroupId'],
                             is_seed=True,
                             options=options)
@@ -512,7 +566,7 @@ def launch_normal_nodes(options: dict):
                 time.sleep(60)
                 launch_instance(region, ip,
                                 ami=options['taupage_amis'][region],
-                                subnet_id=subnets[i % len(subnets)]['SubnetId'],
+                                subnet=subnets[i % len(subnets)],
                                 security_group_id=options['security_groups'][region]['GroupId'],
                                 is_seed=False,
                                 options=options)
@@ -565,12 +619,12 @@ either correct the error or retry.
 @click.option('--volume-size', default=16, type=int, help='in GB, default: 16')
 @click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
 @click.option('--no-termination-protection', is_flag=True, default=False)
-@click.option('--internal', is_flag=True, default=False, help='deploy into internal subnets using Private IP addresses, to be used with a single region only')
+@click.option('--use-dmz', is_flag=True, default=False, help='deploy into DMZ subnets using Public IP addresses')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
 @click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
-@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3)')
-@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3)')
+@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
+@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
 @click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
 @click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
@@ -578,7 +632,7 @@ either correct the error or retry.
 def cli(regions: list,
         cluster_name: str, cluster_size: int, num_tokens: int,
         instance_type: str, volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, internal: bool, hosted_zone: str,
+        no_termination_protection: bool, use_dmz: bool, hosted_zone: str,
         scalyr_key: str, appdynamics_application: str,
         artifact_name: str, docker_image: str, environment: list,
         sns_topic: str, sns_email: str):
@@ -593,12 +647,12 @@ def cli(regions: list,
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
-    if internal and len(regions) > 1:
-        raise click.UsageError('You can specify only one region when using --internal')
+    if len(regions) > 1 and not(use_dmz):
+        raise click.UsageError('You must specify --use-dmz when deploying multi-region.')
 
     if not docker_image:
         if not artifact_name:
-            artifact_name = 'planb-cassandra-3'
+            artifact_name = 'planb-cassandra-3.0'
         image_version = get_latest_docker_image_version(artifact_name)
         docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(artifact_name, image_version)
         info('Using docker image: {}'.format(docker_image))
@@ -624,10 +678,10 @@ def cli(regions: list,
     try:
         taupage_amis = find_taupage_amis(regions)
 
-        subnets = get_subnets('internal-' if internal else 'dmz-', regions)
+        subnets = get_subnets('dmz-' if use_dmz else 'internal-', regions)
 
         allocate_ip_addresses(subnets, cluster_size, node_ips,
-                              take_elastic_ips=not(internal))
+                              take_elastic_ips=use_dmz)
 
         if sns_topic or sns_email:
             alarm_topics = setup_sns_topics_for_alarm(regions, sns_topic, sns_email)
@@ -637,14 +691,22 @@ def cli(regions: list,
         if hosted_zone:
             setup_dns_records(cluster_name, hosted_zone, node_ips)
 
-        setup_security_groups(internal, cluster_name, node_ips, security_groups)
+        setup_security_groups(use_dmz, cluster_name, node_ips, security_groups)
 
         # We should have up to 3 seeds nodes per DC
         seed_count = min(cluster_size, 3)
         seed_nodes = pick_seed_node_ips(node_ips, seed_count)
 
         user_data = generate_taupage_user_data(locals())
-        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
+
+        instance_profile = create_instance_profile(cluster_name)
+        #
+        # FIXME: using an instance profile right after creating one
+        # can result in 'not found' error, because of eventual
+        # consistency.  For now fix with a sleep, should rather
+        # examine exception and retry after some delay.
+        #
+        time.sleep(30)
 
         launch_seed_nodes(locals())
 
@@ -661,7 +723,7 @@ def cli(regions: list,
             info('Cleaning up security group: {}'.format(sg['GroupId']))
             ec2.delete_security_group(GroupId=sg['GroupId'])
 
-        if not internal:
+        if use_dmz:
             for region, ips in node_ips.items():
                 ec2 = boto3.client('ec2', region)
                 for ip in ips:

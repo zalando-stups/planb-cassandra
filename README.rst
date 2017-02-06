@@ -5,8 +5,9 @@ Plan B Cassandra
 Bootstrap a Cassandra cluster on STUPS_/AWS.
 
 The ``create_cluster.py`` script will start individual EC2 instances
-running Taupage_ & Docker with the latest Cassandra version 3.x
-(version 2.1 is still available, but not recommended).
+running Taupage_ & Docker with the latest Cassandra version 3.0.x (the
+new 'tick-tock' releases 3.x and older version 2.1 are still
+available, but not recommended).
 
 The setup can be either internal to a VPC or span multile AWS regions.
 
@@ -38,7 +39,7 @@ with 3 nodes per region (the default size, enough for testing):
 .. code-block:: bash
 
     $ mai login  # get temporary AWS credentials
-    $ ./create_cluster.py --cluster-name mycluster eu-west-1 eu-central-1
+    $ ./create_cluster.py --cluster-name mycluster --use-dmz eu-west-1 eu-central-1
 
 The above example requires Elastic IPs to be allocated in every region.
 
@@ -47,8 +48,12 @@ the following example:
 
 .. code-block:: bash
 
-    $ ./create_cluster.py --cluster-name mycluster --internal eu-central-1
+    $ ./create_cluster.py --cluster-name mycluster eu-central-1
 
+It is possible to use Public IPs even with a single region, for
+example, if your application(s) connect from different VPC(s).  This
+is currently **not recommended**, though, as there is no provision for
+client-to-server encryption.
 
 Available options are::
 
@@ -60,11 +65,11 @@ Available options are::
     --volume-size	Size of EBS data volume in GB for every node.  Default: 16
     --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
     --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
-    --internal		Deploy the cluster within one region, using private IPs only.
+    --use-dmz		Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
     --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
     --scalyr-key	Write Logs API Key for Scalyr (optional).
     --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
-    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3
+    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3.0
     --docker-image	Override default Docker image.
     --environment, -e	Extend/override environment section of Taupage user data.
     --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
@@ -177,7 +182,7 @@ For every node in the cluster, one by one:
 #. Terminate EC2 instance, remember its IP.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
 #. Use the 'Launch More Like This' menu in AWS web console on one of the remaining nodes.
 #. Be sure to reuse the IP of the node you just terminated on the new node and to change the instance type (and/or pick a different Taupage AMI).
-#. While the new instance is spinning up, attach the (now detached) data volume to the new instance.  Use ``/dev/sdf`` as the device name.
+#. While the new instance is spinning up, attach the (now detached) data volume to the new instance.  Use ``/dev/sdf`` as the device name. **Warning: it was observed that this might lead to failure to mount the filesystem on the volume and loss of all data on it.  Improved procedure needs to be tested.**
 #. Log in to node, check application logs, if it didn't start up correctly: ``docker restart taupageapp``.
 #. Repair the node with ``nodetool repair`` (optional: if the node was down for less than ``max_hint_window_in_ms``, which is by default 3 hours, hinted hand off should take care of streaming the changes from alive nodes).
 #. Check status with ``nodetool status``.
@@ -263,7 +268,7 @@ data that the node is no longer responsible for.
 .. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
 
-Upgrade your cluster from Cassandra 2.1 -> 3.x
+Upgrade your cluster from Cassandra 2.1 -> 3.0.x
 ===================
 
 In order to upgrade your Cluster you should run the following steps. You should have in mind that this process is a rolling update, which means applying the changes for each node in your cluster one by one.
@@ -275,7 +280,7 @@ After upgrading the last node in your cluster you are done.
 
 
 1. Check for the latest Plan-B Cassandra image version: 
-  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3/tags | jq '.[-1].name'`
+  `curl https://registry.opensource.zalan.do/teams/stups/artifacts/planb-cassandra-3.0/tags | jq '.[-1].name'`
 2. Connect to the instance where you want to run the upgrade and enter your docker container. 
 3. Run `nodetool upgradesstables` and `nodetool drain`. The latter command will flush the memtables and speed up the upgrade process later on. *This command is mandatory and cannot be skipped.*
    Excerpt from the manual `Cassandra stops listening for connections from the client and other nodes. You need to restart Cassandra after running nodetool drain.`
@@ -324,7 +329,7 @@ After upgrading the last node in your cluster you are done.
     Example:
 
     From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
-    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3:cd95"
+    To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd105"
     ```
 7. Start the instance and connect to it. At this point your node should be working and serving reads and writes. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`.
    Check the logs for errors and warnings. (__Note:__ For the size of ~12GB SSTables it takes approximately one hour to convert them to the new format.)

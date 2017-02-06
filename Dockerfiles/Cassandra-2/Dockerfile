@@ -1,9 +1,9 @@
-FROM registry.opensource.zalan.do/stups/openjdk:8-50
+FROM registry.opensource.zalan.do/stups/openjdk:8-cd26
 
 MAINTAINER Zalando SE
 
 # SSL Storage Port, Jolokia Agent, CQL Native
-EXPOSE 7001 8778 9042
+EXPOSE 7001 7199 8778 9042
 
 ENV CASSIE_VERSION=2.1.16
 ENV DEBIAN_FRONTEND=noninteractive
