@@ -9,6 +9,9 @@
 # ADMIN_PASSWORD
 # MEMTABLE_FLUSH_WRITERS
 # CONCURRENT_COMPACTORS
+# AUTHENTICATOR
+# AUTHORIZER
+# ROLE_MANAGER
 
 if [ -z "$CLUSTER_NAME" ] ;
 then
@@ -80,6 +83,18 @@ fi
 # the same for concurrent_compactors setting:
 if [ -z "$CONCURRENT_COMPACTORS" ]; then
     export CONCURRENT_COMPACTORS=$ncores_4
+fi
+
+if [ -z "$AUTHENTICATOR" ]; then
+    export AUTHENTICATOR=PasswordAuthenticator
+fi
+
+if [ -z "$AUTHORIZER" ]; then
+    export AUTHORIZER=CassandraAuthorizer
+fi
+
+if [ -z "$ROLE_MANAGER" ]; then
+    export ROLE_MANAGER=CassandraRoleManager
 fi
 
 echo "Generating configuration from template ..."
