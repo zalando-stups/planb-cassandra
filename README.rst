@@ -179,10 +179,12 @@ to scale up EC2 instances or update Taupage AMI.
 For every node in the cluster, one by one:
 
 #. Stop a node (``nodetool drain; nodetool stopdaemon``).
-#. Terminate EC2 instance, remember its IP.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
+#. Terminate EC2 instance, **take note of its IP address(es)**.  Simply stopping will not work as the private IP will be still occupied by the stopped instance.
 #. Use the 'Launch More Like This' menu in AWS web console on one of the remaining nodes.
-#. Be sure to reuse the IP of the node you just terminated on the new node and to change the instance type (and/or pick a different Taupage AMI).
-#. While the new instance is spinning up, attach the (now detached) data volume to the new instance.  Use ``/dev/sdf`` as the device name. **Warning: it was observed that this might lead to failure to mount the filesystem on the volume and loss of all data on it.  Improved procedure needs to be tested.**
+#. **Use the latest available Taupage AMI version.  Older versions are subject to data loss race conditions when attaching EBS volumes.**
+#. Be sure to reuse the private IP of the node you just terminated on the new node.
+#. In the 'Instance Details' section, edit 'User Data' to add ``erase_on_boot: false`` flag under ``mounts: /var/lib/cassandra``.  See documentation of Taupage_ for detailed decsription and syntax example.  The docker image version being used can also be updated in this section, however, it is recommended to avoid changing multiple things at a time.  Also, docker image can be update without terminating the instance, by stopping and starting it with updated 'User Data' instead.
+#. While the new instance is spinning up, attach the (now detached) data volume to the new instance.  Use ``/dev/sdf`` as the device name.
 #. Log in to node, check application logs, if it didn't start up correctly: ``docker restart taupageapp``.
 #. Repair the node with ``nodetool repair`` (optional: if the node was down for less than ``max_hint_window_in_ms``, which is by default 3 hours, hinted hand off should take care of streaming the changes from alive nodes).
 #. Check status with ``nodetool status``.
