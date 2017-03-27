@@ -88,6 +88,12 @@ If you use the Hosted Zone parameter, a full name specification is
 required e.g.: ``--hosted-zone myzone.example.com.`` (note the
 trailing dot.)
 
+By default AppDynamics agent will be started with application name set
+to the cluster name.  You can suppress this if you don't want the
+overhead of the agent (or using a different log shipping mechanism,
+such as Scalyr.)  To do so pass an empty string for this parameter
+``--appdynamics-application=''``.
+
 It might be required to update the Security Group(s) to allow SSH
 access (TCP port 22) from Odd_ host.  After that is done, you can use
 `Più`_ to get SSH access and create your application user and the

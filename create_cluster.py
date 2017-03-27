@@ -358,9 +358,17 @@ def generate_taupage_user_data(options: dict) -> str:
                     'options': 'noatime,nodiratime'
                 }
             },
-            'appdynamics_application': options['appdynamics_application'] or options['cluster_name'],
             'scalyr_account_key': options['scalyr_key']
     }
+
+    app_name = options['appdynamics_application']
+    if app_name is None:
+        data['appdynamics_application'] = options['cluster_name']
+    elif app_name:
+        data['appdynamics_application'] = app_name
+    else:
+        # it must be an empty string then: don't set anything in user data
+        pass
 
     if options['environment']:
         data['environment'].update(options['environment'])
@@ -501,12 +509,6 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         if options['use_dmz']:
             ec2.associate_address(InstanceId=instance_id,
                                   AllocationId=ip['AllocationId'])
-
-        # tag the attached data EBS volume for easier cleanup when testing
-        for bd in instance['BlockDeviceMappings']:
-            if bd['DeviceName'] == '/dev/xvdf':
-                ec2.create_tags(Resources=[bd['Ebs']['VolumeId']],
-                                Tags=[{'Key': 'Name', 'Value': options['cluster_name']}])
 
         # add an auto-recovery alarm for this instance
         cw = boto3.client('cloudwatch', region_name=region)
