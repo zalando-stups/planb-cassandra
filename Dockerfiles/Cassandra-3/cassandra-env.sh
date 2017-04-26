@@ -234,7 +234,9 @@ fi
 # JMX connections.
 # For security reasons, you should not expose this port to the internet.  Firewall it if needed.
 JMX_PORT="7199"
-JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT"
+# Make JMX Public
+JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.remote.port=$JMX_PORT"
+JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.rmi.port=$JMX_PORT"
 JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.authenticate=false"
 
 # jmx ssl options
