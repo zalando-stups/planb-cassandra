@@ -15,7 +15,8 @@ import os
 from .common import ec2_client, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
-    override_ephemeral_block_devices, create_auto_recovery_alarm, \
+    override_ephemeral_block_devices, \
+    setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
     create_instance_profile
 
 
@@ -243,10 +244,15 @@ def configure_instance(ec2: object, volume: dict, options: dict):
     instance_id = instance['InstanceId']
     create_tags(ec2, instance_id, {'Name': options['cluster_name']})
 
-    create_auto_recovery_alarm(options['region'],
+    region = options['region']
+    alarm_sns_topic_arn = None
+    if options['alarm_topics']:
+        alarm_sns_topic_arn = options['alarm_topics'][region]
+
+    create_auto_recovery_alarm(region,
                                options['cluster_name'],
                                instance_id,
-                               None) # TODO: get SNS topic somewhere
+                               alarm_sns_topic_arn)
 
     # TODO: we should have another transition to wait for Cassandra to
     # jump to Normal, before declaring it complete
@@ -349,6 +355,16 @@ def update_cluster(options: dict):
     instances = list_instances_to_update(ec2, options['cluster_name'])
     if not instances:
         return
+
+    if options['sns_topic'] or options['sns_email']:
+        regions = [options['region']]  # a list of the only region we act on now
+        alarm_topics = setup_sns_topics_for_alarm(regions,
+                                                  options['sns_topic'],
+                                                  options['sns_email'])
+    else:
+        alarm_topics = {}
+    options = dict(options, alarm_topics=alarm_topics)
+
     # TODO: List all nodes with IPs and some status information
     for i in instances:
         # TODO: user should hit Ctrl-c to cancel everything

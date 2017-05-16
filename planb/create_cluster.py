@@ -21,7 +21,8 @@ import copy
 import netaddr
 
 from .common import override_ephemeral_block_devices, dump_user_data_for_taupage, \
-    create_auto_recovery_alarm, create_instance_profile
+    setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
+    create_instance_profile
 
 
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
@@ -305,21 +306,6 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
                         }
                     }]
                 })
-
-
-def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> list:
-    if not(topic_name):
-        topic_name = 'planb-cassandra-system-event'
-
-    result = {}
-    for region in regions:
-        sns = boto3.client('sns', region_name=region)
-        resp = sns.create_topic(Name=topic_name)
-        topic_arn = resp['TopicArn']
-        if email:
-            sns.subscribe(TopicArn=topic_arn, Protocol='email', Endpoint=email)
-        result[region] = topic_arn
-    return result
 
 
 def generate_taupage_user_data(options: dict) -> str:

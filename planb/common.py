@@ -78,6 +78,21 @@ def override_ephemeral_block_devices(mappings: dict) -> dict:
     return block_devices
 
 
+def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> list:
+    if not(topic_name):
+        topic_name = 'planb-cassandra-system-event'
+
+    result = {}
+    for region in regions:
+        sns = boto3.client('sns', region_name=region)
+        resp = sns.create_topic(Name=topic_name)
+        topic_arn = resp['TopicArn']
+        if email:
+            sns.subscribe(TopicArn=topic_arn, Protocol='email', Endpoint=email)
+        result[region] = topic_arn
+    return result
+
+
 def create_auto_recovery_alarm(region: str, cluster_name: str,
                                instance_id: str, alarm_sns_topic_arn: str):
     session = boto3.Session(profile_name='planb_autorecovery')
@@ -87,7 +102,7 @@ def create_auto_recovery_alarm(region: str, cluster_name: str,
 
     alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
     if alarm_sns_topic_arn:
-        alarm_actions.append(alarm_sns_topics_arn)
+        alarm_actions.append(alarm_sns_topic_arn)
 
     cw.put_metric_alarm(AlarmName=alarm_name,
                         AlarmActions=alarm_actions,
