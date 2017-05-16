@@ -104,7 +104,6 @@ Available options are:
 --use-dmz                    Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
 --hosted-zone                Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
 --scalyr-key                 Write Logs API Key for Scalyr (optional).
---appdynamics-application    Name of the application for AppDynamics log shipping (optional).
 --artifact-name              Override Pierone artifact name.  Default: planb-cassandra-3.0
 --docker-image               Override default Docker image.
 --environment, -e            Extend/override environment section of Taupage user data.
@@ -124,12 +123,6 @@ specified, then it will be subscribed to the topic.
 If you use the Hosted Zone parameter, a full name specification is
 required e.g.: ``--hosted-zone myzone.example.com.`` (note the
 trailing dot.)
-
-By default AppDynamics agent will be started with application name set
-to the cluster name.  You can suppress this if you don't want the
-overhead of the agent (or using a different log shipping mechanism,
-such as Scalyr.)  To do so pass an empty string for this parameter
-``--appdynamics-application=''``.
 
 It might be required to update the Security Group(s) of the Cassandra
 cluster to allow SSH access (TCP port 22, Jolokia Port 8778) from Odd_
