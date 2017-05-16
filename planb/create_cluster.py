@@ -20,6 +20,10 @@ import sys
 import copy
 import netaddr
 
+from .common import override_ephemeral_block_devices, dump_user_data_for_taupage, \
+    create_auto_recovery_alarm, create_instance_profile
+
+
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
                           result: dict) -> dict:
     '''
@@ -343,8 +347,8 @@ def generate_taupage_user_data(options: dict) -> str:
                 'REGIONS': ' '.join(options['regions']),
                 'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
                 'SEEDS': ','.join(all_seeds),
-                'KEYSTORE': keystore_base64,
-                'TRUSTSTORE': truststore_base64,
+                'KEYSTORE': str(keystore_base64, 'UTF-8'),
+                'TRUSTSTORE': str(truststore_base64, 'UTF-8'),
                 'ADMIN_PASSWORD': generate_password()
             },
             'volumes': {
@@ -375,50 +379,6 @@ def generate_taupage_user_data(options: dict) -> str:
 
     return data
 
-def create_instance_profile(cluster_name: str):
-    profile_name = 'profile-{}'.format(cluster_name)
-    role_name = 'role-{}'.format(cluster_name)
-    policy_name = 'policy-{}-datavolume'.format(cluster_name)
-    name_tag_pattern = '{}-*'.format(cluster_name)
-
-    iam = boto3.client('iam')
-    profile = iam.create_instance_profile(InstanceProfileName=profile_name)
-
-    role = iam.create_role(RoleName=role_name, AssumeRolePolicyDocument="""{
-        "Version": "2012-10-17",
-        "Statement": [{
-             "Action": "sts:AssumeRole",
-             "Effect": "Allow",
-             "Principal": {
-                 "Service": "ec2.amazonaws.com"
-             }
-        }]
-    }""")
-
-    policy_document = """{
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "ec2:DescribeTags",
-                    "ec2:DeleteTags",
-                    "ec2:DescribeVolumes",
-                    "ec2:AttachVolume"
-                ],
-                "Resource": "*"
-            }
-        ]
-    }"""
-    iam.put_role_policy(RoleName=role_name,
-                        PolicyName=policy_name,
-                        PolicyDocument=policy_document)
-
-    iam.add_role_to_instance_profile(InstanceProfileName=profile_name,
-                                     RoleName=role_name)
-
-    return profile['InstanceProfile']
-
 def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
     ebs_data = {
         "AvailabilityZone": zone,
@@ -442,40 +402,14 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
     with Action('Launching {} node {} in {}..'.format(node_type, ip['_defaultIp'], region)) as act:
         ec2 = boto3.client('ec2', region_name=region)
 
-        #
-        # Override any ephemeral volumes with NoDevice mapping,
-        # otherwise auto-recovery alarm cannot be actually enabled.
-        #
-        block_devices = []
-        for bd in ami.block_device_mappings:
-            if 'Ebs' in bd:
-                #
-                # This has to be our root EBS.
-                #
-                # If the Encrypted flag is present, we have to delete
-                # it even if it matches the actual snapshot setting,
-                # otherwise amazon will complain rather loudly.
-                #
-                # Take a deep copy before deleting the key:
-                #
-                bd = copy.deepcopy(bd)
-
-                root_ebs = bd['Ebs']
-                if 'Encrypted' in root_ebs:
-                    del(root_ebs['Encrypted'])
-
-                block_devices.append(bd)
-            else:
-                # ignore any ephemeral volumes (aka. instance storage)
-                block_devices.append({'DeviceName': bd['DeviceName'],
-                                      'NoDevice': ''})
+        block_devices = override_ephemeral_block_devices(ami.block_device_mappings)
 
         volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
         create_tagged_volume(ec2, options, subnet['AvailabilityZone'], volume_name)
 
         user_data = options['user_data']
         user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
-        taupage_user_data = '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
+        taupage_user_data = dump_user_data_for_taupage(user_data)
 
         resp = ec2.run_instances(
             ImageId=ami.id,
@@ -510,25 +444,12 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
             ec2.associate_address(InstanceId=instance_id,
                                   AllocationId=ip['AllocationId'])
 
-        # add an auto-recovery alarm for this instance
-        cw = boto3.client('cloudwatch', region_name=region)
-        alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
+        alarm_sns_topic_arn = None
         if options['alarm_topics']:
-            alarm_actions.append(options['alarm_topics'][region])
+            alarm_sns_topic_arn = options['alarm_topics'][region]
 
-        cw.put_metric_alarm(AlarmName='{}-{}-auto-recover'.format(options['cluster_name'], instance_id),
-                            AlarmActions=alarm_actions,
-                            MetricName='StatusCheckFailed_System',
-                            Namespace='AWS/EC2',
-                            Statistic='Minimum',
-                            Dimensions=[{
-                                'Name': 'InstanceId',
-                                'Value': instance_id
-                            }],
-                            Period=60,  # 1 minute
-                            EvaluationPeriods=2,
-                            Threshold=0,
-                            ComparisonOperator='GreaterThanThreshold')
+        create_auto_recovery_alarm(region, options['cluster_name'],
+                                   instance_id, alarm_sns_topic_arn)
 
 
 def launch_seed_nodes(options: dict):
@@ -604,64 +525,34 @@ either correct the error or retry.
 ''')
 
 
-@click.command()
-@click.option('--cluster-name', help='name of the cluster, required')
-@click.option('--cluster-size', default=3, type=int, help='number of nodes per region, default: 3')
-@click.option('--num-tokens', default=256, type=int, help='number of virtual nodes per node, default: 256')
-@click.option('--instance-type', default='t2.medium', help='default: t2.medium')
-@click.option('--volume-type', default='gp2', help='gp2 (default) | io1 | standard')
-@click.option('--volume-size', default=16, type=int, help='in GB, default: 16')
-@click.option('--volume-iops', default=100, type=int, help='for type io1, default: 100')
-@click.option('--no-termination-protection', is_flag=True, default=False)
-@click.option('--use-dmz', is_flag=True, default=False, help='deploy into DMZ subnets using Public IP addresses')
-@click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
-@click.option('--scalyr-key')
-@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
-@click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
-@click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
-@click.option('--environment', '-e', multiple=True)
-@click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
-@click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
-@click.argument('regions', nargs=-1)
-def cli(regions: list,
-        cluster_name: str, cluster_size: int, num_tokens: int,
-        instance_type: str, volume_type: str, volume_size: int, volume_iops: int,
-        no_termination_protection: bool, use_dmz: bool, hosted_zone: str,
-        scalyr_key: str, appdynamics_application: str,
-        artifact_name: str, docker_image: str, environment: list,
-        sns_topic: str, sns_email: str):
-
-    if not cluster_name:
-        raise click.UsageError('You must specify the cluster name')
-
-    cluster_name_re = '^[a-z][a-z0-9-]*[a-z0-9]$'
-    if not re.match(cluster_name_re, cluster_name):
-        raise click.UsageError('Cluster name must only contain lowercase latin letters, digits and dashes (it also must start with a letter and cannot end with a dash), in other words it must be matched by the following regular expression: {}'.format(cluster_name_re))
-
-    if not regions:
-        raise click.UsageError('Please specify at least one region')
-
-    if len(regions) > 1 and not(use_dmz):
-        raise click.UsageError('You must specify --use-dmz when deploying multi-region.')
-
-    if not docker_image:
-        if not artifact_name:
-            artifact_name = 'planb-cassandra-3.0'
-        image_version = get_latest_docker_image_version(artifact_name)
-        docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(artifact_name, image_version)
+def validate_artifact_version(options: dict) -> dict:
+    if not options['docker_image']:
+        if not options['artifact_name']:
+            options['artifact_name'] = 'planb-cassandra-3.0'
+        image_version = get_latest_docker_image_version(options['artifact_name'])
+        docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(options['artifact_name'], image_version)
         info('Using docker image: {}'.format(docker_image))
     else:
-        if artifact_name:
+        if options['artifact_name']:
             raise click.UsageError('Conflicting options: --artifact-name and --docker-image cannot be specified at the same time')
-        image_version = docker_image.split(':')[-1]
+        image_version = options['docker_image'].split(':')[-1]
+        docker_image = options['docker_image']
+    return dict(options, docker_image=docker_image, image_version=image_version)
 
-    if environment:
-        environment = dict(map(lambda x: x.split("="), environment))
 
-        for k,v in environment.items():
-            print("Adding optional env var: {}={}".format(k, v))
+def read_environment(options: dict) -> dict:
+    if options['environment']:
+        return dict(options, environment=dict(map(lambda x: x.split("=", 1),
+                                                  options['environment'])))
+    else:
+        return options
 
-    keystore, truststore = generate_certificate(cluster_name)
+
+def create_cluster(options: dict):
+    options = validate_artifact_version(options)
+    options = read_environment(options)
+
+    keystore, truststore = generate_certificate(options['cluster_name'])
 
     # List of IP addresses by region
     node_ips = collections.defaultdict(list)
@@ -670,54 +561,66 @@ def cli(regions: list,
     security_groups = {}
 
     try:
-        taupage_amis = find_taupage_amis(regions)
+        taupage_amis = find_taupage_amis(options['regions'])
 
-        subnets = get_subnets('dmz-' if use_dmz else 'internal-', regions)
+        subnets = get_subnets('dmz-' if options['use_dmz'] else 'internal-', options['regions'])
 
-        allocate_ip_addresses(subnets, cluster_size, node_ips,
-                              take_elastic_ips=use_dmz)
+        allocate_ip_addresses(subnets, options['cluster_size'], node_ips,
+                              take_elastic_ips=options['use_dmz'])
 
-        if sns_topic or sns_email:
-            alarm_topics = setup_sns_topics_for_alarm(regions, sns_topic, sns_email)
+        if options['sns_topic'] or options['sns_email']:
+            alarm_topics = setup_sns_topics_for_alarm(options['regions'], options['sns_topic'], options['sns_email'])
         else:
             alarm_topics = {}
 
-        if hosted_zone:
-            setup_dns_records(cluster_name, hosted_zone, node_ips)
+        if options['hosted_zone']:
+            setup_dns_records(options['cluster_name'], options['hosted_zone'], node_ips)
 
-        setup_security_groups(use_dmz, cluster_name, node_ips, security_groups)
+        setup_security_groups(options['use_dmz'], options['cluster_name'], node_ips, security_groups)
 
         # We should have up to 3 seeds nodes per DC
-        seed_count = min(cluster_size, 3)
+        seed_count = min(options['cluster_size'], 3)
         seed_nodes = pick_seed_node_ips(node_ips, seed_count)
 
-        user_data = generate_taupage_user_data(locals())
+        options = dict(options,
+                       keystore=keystore,
+                       truststore=truststore,
+                       seed_count=seed_count,
+                       seed_nodes=seed_nodes)
+        user_data = generate_taupage_user_data(options)
 
-        instance_profile = create_instance_profile(cluster_name)
-        #
-        # FIXME: using an instance profile right after creating one
-        # can result in 'not found' error, because of eventual
-        # consistency.  For now fix with a sleep, should rather
-        # examine exception and retry after some delay.
-        #
-        time.sleep(30)
+        instance_profile = create_instance_profile(options['cluster_name'])
 
-        launch_seed_nodes(locals())
+        options = dict(options,
+                       node_ips=node_ips,
+                       security_groups=security_groups,
+                       taupage_amis=taupage_amis,
+                       subnets=subnets,
+                       alarm_topics=alarm_topics,
+                       user_data=user_data,
+                       instance_profile=instance_profile)
+
+        launch_seed_nodes(options)
 
         # TODO: make sure all seed nodes are up
-        launch_normal_nodes(locals())
+        launch_normal_nodes(options)
 
-        print_success_message(locals())
+        print_success_message(options)
 
     except:
         print_failure_message()
 
+        #
+        # TODO: in order to break dependencies, delete entities in the
+        # order opposite to the creation.  For that pushing things on
+        # Undo stack sounds like a natural choice.
+        #
         for region, sg in security_groups.items():
             ec2 = boto3.client('ec2', region)
             info('Cleaning up security group: {}'.format(sg['GroupId']))
             ec2.delete_security_group(GroupId=sg['GroupId'])
 
-        if use_dmz:
+        if options['use_dmz']:
             for region, ips in node_ips.items():
                 ec2 = boto3.client('ec2', region)
                 for ip in ips:

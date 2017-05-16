@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import MagicMock
 
-from create_cluster import *
+from planb.create_cluster import *
+
 
 def test_generate_private_ip_addresses():
     ec2 = MagicMock()
@@ -45,3 +46,11 @@ def test_generate_private_ip_addresses():
 
     with pytest.raises(IpAddressPoolDepletedException):
         list(generate_private_ip_addresses(ec2, [{'CidrBlock': '192.168.1.0/27'}], 21))
+
+
+def test_read_environment():
+    raw_list = ["key=value",
+                "base64=dGVzdA=="]
+    parsed_dict = {'key': 'value',
+                   'base64': 'dGVzdA=='}
+    assert read_environment({'environment': raw_list}) == {'environment': parsed_dict}

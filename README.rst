@@ -2,17 +2,15 @@
 Plan B Cassandra
 ================
 
-Bootstrap a Cassandra cluster on STUPS_/AWS.
+Bootstrap and update a Cassandra cluster on STUPS_/AWS.
 
-The ``create_cluster.py`` script will start individual EC2 instances
-running Taupage_ & Docker with the latest Cassandra version 3.0.x (the
-new 'tick-tock' releases 3.x and older version 2.1 are still
-available, but not recommended).
-
-The setup can be either internal to a VPC or span multile AWS regions.
+Planb deploys Cassandra by means of individual EC2 instances running Taupage_ & Docker with the latest
+Cassandra version 3.0.x (default, the new 'tick-tock' releases 3.x and older version 2.1
+are still available).
 
 Features:
 
+* internal to a VPC or span multiple AWS regions
 * fully-automated setup including Elastic IPs (when needed), EC2 security groups, SSL certs
 * multi-region replication available (using Ec2MultiRegionSnitch_)
 * encrypted inter-node communication (SSL/TLS)
@@ -24,56 +22,95 @@ Non-Features:
 * dynamic cluster sizing - please see `STUPS Cassandra`_ if you need a dynamic Cassandra cluster setup
 
 
-Usage
-=====
-
-Prerequisites:
+Prerequisites
+==============
 
 * Python 3.5+
 * Python dependencies (``sudo pip3 install -r requirements.txt``)
-* Java 8 with ``keytool`` in your ``PATH`` (required to generate SSL certs)
+* Java 8 with ``keytool`` in your ``PATH`` (required to generate SSL certificates)
+* Latest Stups tooling installed and configured
+* You have created a dedicated AWS IAM user for autorecovery with non temporary credentials
+  This policy document for the autorecovery user should look like the following::
 
-For example, to create a cluster named "mycluster" in the two regions
-with 3 nodes per region (the default size, enough for testing):
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:DescribeInstanceRecoveryAttribute",
+                    "ec2:RecoverInstances",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeInstances",
+                    "cloudwatch:PutMetricAlarm"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+* You have a ``planb_autorecovery`` section in your AWS credentials file with the credentials
+  of the autorecovery user::
+
+    [planb_autorecovery]
+    aws_access_key_id = THEKEYID
+    aws_secret_access_key = THESECRETKEY
+
+  These credentials are used to create the autorecovery alarm. The recovery action is performed
+  by this dedicated autorecovery user.
+
+
+Usage
+=====
+
+Create a Cluster
+----------------
+
+To create a cluster named "mycluster" in two regions with 3 nodes per region
+(the default size, enough for testing):
 
 .. code-block:: bash
 
-    $ mai login  # get temporary AWS credentials
-    $ ./create_cluster.py --cluster-name mycluster --use-dmz eu-west-1 eu-central-1
+    $ zaws login  # get temporary AWS credentials
+    $ ./planb.py create --cluster-name mycluster --use-dmz eu-west-1 eu-central-1
 
-The above example requires Elastic IPs to be allocated in every region.
+The above example requires Elastic IPs to be allocated in every region (this
+might require to increase the AWS limits for Elastic IPs).
 
 To create a cluster in a single region, using private IPs only, see
 the following example:
 
 .. code-block:: bash
 
-    $ ./create_cluster.py --cluster-name mycluster eu-central-1
+    $ ./planb.py create --cluster-name mycluster eu-central-1
 
 It is possible to use Public IPs even with a single region, for
 example, if your application(s) connect from different VPC(s).  This
 is currently **not recommended**, though, as there is no provision for
 client-to-server encryption.
 
-Available options are::
+Available options are:
 
-    --cluster-name	Not actually an option, you must specify the name of a cluster to create
-    --cluster-size	Number of nodes to create per AWS region.  Default: 3
-    --num-tokens	Number of virtual nodes per node.  Default: 256
-    --instance-type	AWS EC2 instance type to use for the nodes.  Default: t2.medium
-    --volume-type	Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
-    --volume-size	Size of EBS data volume in GB for every node.  Default: 16
-    --volume-iops	Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
-    --no-termination-protection	Don't protect EC2 instances from accidental termination.  Useful for testing and development.
-    --use-dmz		Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
-    --hosted-zone	Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
-    --scalyr-key	Write Logs API Key for Scalyr (optional).
-    --appdynamics-application	Name of the application for AppDynamics log shipping (optional).
-    --artifact-name     Override Pierone artifact name.  Default: planb-cassandra-3.0
-    --docker-image	Override default Docker image.
-    --environment, -e	Extend/override environment section of Taupage user data.
-    --sns-topic		Amazon SNS topic name to use for notifications about Auto-Recovery.
-    --sns-email		Email address to subscribe to Amazon SNS notification topic.  See below for details.
+===========================  ============================================================================
+--cluster-name               Not actually an option, you must specify the name of a cluster to create
+--cluster-size               Number of nodes to create per AWS region.  Default: 3
+--num-tokens                 Number of virtual nodes per node.  Default: 256
+--instance-type              AWS EC2 instance type to use for the nodes.  Default: t2.medium
+--volume-type                Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
+--volume-size                Size of EBS data volume in GB for every node.  Default: 16
+--volume-iops                Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
+--no-termination-protection  Don't protect EC2 instances from accidental termination.  Useful for testing and development.
+--use-dmz                    Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
+--hosted-zone                Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
+--scalyr-key                 Write Logs API Key for Scalyr (optional).
+--appdynamics-application    Name of the application for AppDynamics log shipping (optional).
+--artifact-name              Override Pierone artifact name.  Default: planb-cassandra-3.0
+--docker-image               Override default Docker image.
+--environment, -e            Extend/override environment section of Taupage user data.
+--sns-topic                  Amazon SNS topic name to use for notifications about Auto-Recovery.
+--sns-email                  Email address to subscribe to Amazon SNS notification topic.  See below for details.
+===========================  ============================================================================
 
 In order to be able to receive notification emails in case instance
 recovery is triggered, provide either SNS topic name in
@@ -94,10 +131,10 @@ overhead of the agent (or using a different log shipping mechanism,
 such as Scalyr.)  To do so pass an empty string for this parameter
 ``--appdynamics-application=''``.
 
-It might be required to update the Security Group(s) to allow SSH
-access (TCP port 22) from Odd_ host.  After that is done, you can use
-`Più`_ to get SSH access and create your application user and the
-first schema:
+It might be required to update the Security Group(s) of the Cassandra
+cluster to allow SSH access (TCP port 22, Jolokia Port 8778) from Odd_
+host.  After that is done, you can use `Più`_ to get SSH access and
+create your application user and the first schema:
 
 .. code-block:: bash
 
@@ -110,11 +147,43 @@ first schema:
 The generated administrator password is available inside the docker
 container in an environment variable ``ADMIN_PASSWORD``.
 
-The list of private IP contact points for the application can be obtained with the following snippet:
+The list of private IP contact points for the application can be
+obtained with the following snippet:
 
 .. code-block:: bash
 
     $ aws ec2 describe-instances --region $REGION --filter 'Name=tag:Name,Values=planb-cassandra' | grep PrivateIp | sed s/[^0-9.]//g | sort -u
+
+Update of a cluster
+-------------------
+
+.. important::
+
+   The Jolokia port 8778 should be accessible from the Odd host. Ensure the
+   ingress rule for your clusters security group allows connections from the Odd
+   host.
+
+To update the Docker image or AMI you should ensure that you are logged in to
+your account and have SSH access to your Odd host. The following commands will
+allow you to update the Docker image on all nodes of the cluster `mycluster`.
+If an action is interrupted the next call will resume with the last action on
+the last used node.
+
+.. code-block:: bash
+
+    $ zaws re $ACCOUNT
+    $ piu re -O $ODDHOST $ODDHOST
+    $ ./planb.py update --cluster-name mycluster --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 --region eu-central-1 -O $ODDHOST
+
+Available options for update:
+
+=================      ========================================================
+--cluster-name         The name of your cluster (required)
+--odd-host             The Odd host in the region of your VPC (required)
+--region               The region where the update should be applied (required)
+--docker-image         The full specified name of the Docker image
+--taupage-ami-id       The full specified name of the AMI
+=================      ========================================================
 
 
 Client configuration for Public IPs setup
@@ -330,7 +399,7 @@ After upgrading the last node in your cluster you are done.
     ```
     Example:
 
-    From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89" 
+    From: "source: registry.opensource.zalan.do/stups/planb-cassandra:cd89"
     To: "source: registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd105"
     ```
 7. Start the instance and connect to it. At this point your node should be working and serving reads and writes. Login to the docker container and finish the upgrade by running `nodetool upgradesstables`.
