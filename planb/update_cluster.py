@@ -265,7 +265,7 @@ def cleanup_state(ec2: object, volume: dict):
 
 def step_forward(ec2: object, volume_id: str, options: dict):
     volume = get_volume(ec2, volume_id)
-    tags = tags_as_dict(volume['Tags'])
+    tags = tags_as_dict(volume.get('Tags', []))
     if tags.get('planb:operation') != 'update':
         raise Exception("Volume {} not prepared for operation 'update'".format(volume_id))
 
@@ -372,7 +372,7 @@ def update_cluster(options: dict):
         try:
             volume_id = find_data_volume_id(ec2, i)
             volume = get_volume(ec2, volume_id)
-            tags = tags_as_dict(volume['Tags'])
+            tags = tags_as_dict(volume.get('Tags', []))
             if 'planb:operation:state' not in tags:
                 tag_instance_volume(ec2, volume, tags, i, options['cluster_name'])
 
