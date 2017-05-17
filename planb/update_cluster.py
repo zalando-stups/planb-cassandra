@@ -16,7 +16,7 @@ from .common import ec2_client, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, create_auto_recovery_alarm, \
-    create_instance_profile
+    create_instance_profile, get_instance_profile
 
 
 """
@@ -181,16 +181,20 @@ def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
                           'SubnetId',
                           'PrivateIpAddress',
                           'UserData'])
-    instanceProfile={'Arn':
-                         saved_instance['IamInstanceProfile']['Arn']
-                         if 'IamInstanceProfile' in saved_instance
-                         else create_instance_profile(options['cluster_name'])}
+    if 'IamInstanceProfile' in saved_instance:
+        profile = saved_instance['IamInstanceProfile']
+    else:
+        profile = get_instance_profile(options['cluster_name'])
+        if profile is None:
+            profile = create_instance_profile(options['cluster_name'])
+
+    instance_profile = {'Arn': profile['Arn']}
     params = dict(params,
                   MinCount=1,
                   MaxCount=1,
                   SecurityGroupIds=[sg['GroupId']
                                     for sg in saved_instance['SecurityGroups']],
-                  IamInstanceProfile=instanceProfile)
+                  IamInstanceProfile=instance_profile)
 
     options_to_api = {'taupage_ami_id': 'ImageId'}
 #                      'instance_type': 'InstanceType'}
