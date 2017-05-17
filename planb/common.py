@@ -1,4 +1,5 @@
 import boto3
+import botocore
 import yaml
 import json
 import copy
@@ -103,13 +104,29 @@ def create_auto_recovery_alarm(region: str, cluster_name: str,
                         Threshold=0,
                         ComparisonOperator='GreaterThanThreshold')
 
+
+def make_instance_profile_name(cluster_name: str) -> str:
+    return 'profile-{}'.format(cluster_name)
+
+
+def get_instance_profile(cluster_name: str) -> dict:
+    iam = boto3.client('iam')
+    try:
+        profile_name = make_instance_profile_name(cluster_name)
+        profile = iam.get_instance_profile(InstanceProfileName=profile_name)
+        return profile['InstanceProfile']
+    except botocore.errorfactory.NoSuchEntityException:
+        return None
+
+
 def create_instance_profile(cluster_name: str):
-    profile_name = 'profile-{}'.format(cluster_name)
+    profile_name = make_instance_profile_name(cluster_name)
     role_name = 'role-{}'.format(cluster_name)
     policy_name = 'policy-{}-datavolume'.format(cluster_name)
     name_tag_pattern = '{}-*'.format(cluster_name)
 
     iam = boto3.client('iam')
+
     profile = iam.create_instance_profile(InstanceProfileName=profile_name)
 
     role = iam.create_role(RoleName=role_name, AssumeRolePolicyDocument="""{
