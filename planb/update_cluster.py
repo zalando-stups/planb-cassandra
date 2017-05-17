@@ -7,6 +7,7 @@ import base64
 import click
 import yaml
 import time
+import sys
 import re
 import io
 import os
@@ -16,7 +17,7 @@ from .common import ec2_client, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, create_auto_recovery_alarm, \
-    create_instance_profile
+    create_instance_profile, get_instance_profile
 
 
 """
@@ -30,6 +31,11 @@ logger = logging.getLogger(__name__)
 # TODO: may be this port is occupied?
 local_jolokia_port = 8778
 remote_jolokia_port = 8778
+jolokia_url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
+
+
+class ClusterUnhealthyException(Exception):
+    pass
 
 
 def text_timestamp():
@@ -128,17 +134,31 @@ def list_instance_dump_files() -> list:
     return [x for x in os.listdir() if re.match('^vol-\w+\.json$', x)]
 
 
+def get_cluster_status() -> dict:
+    try:
+        queries = [{'mbean': 'org.apache.cassandra.net:type=FailureDetector',
+                    'type': 'read'}]
+        response = requests.post(jolokia_url, json=queries).json()
+        if len(response) == 1:
+            return response[0].get('value', {})
+        return {}
+    except requests.exceptions.ConnectionError:
+        return {}
+
+
 # TODO: when there's no tunnel: private_ip: str ?
 def drain_cassandra():
-    url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
     # TODO: what about timeout?
-    requests.post(url,
+    requests.post(jolokia_url,
                   json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
                          'type': 'exec',
                          'operation': 'drain'}])
 
 
 def drain_node(ec2: object, volume: dict):
+    if get_cluster_status().get('DownEndpointCount') != 0:
+        raise ClusterUnhealthyException()
+
     instance = find_instance_from_volume(ec2, volume)
     if not instance:
         set_error_state(ec2, volume, "Cannot find instance for {}" \
@@ -181,16 +201,20 @@ def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
                           'SubnetId',
                           'PrivateIpAddress',
                           'UserData'])
-    instanceProfile={'Arn':
-                         saved_instance['IamInstanceProfile']['Arn']
-                         if 'IamInstanceProfile' in saved_instance
-                         else create_instance_profile(options['cluster_name'])}
+    if 'IamInstanceProfile' in saved_instance:
+        profile = saved_instance['IamInstanceProfile']
+    else:
+        profile = get_instance_profile(options['cluster_name'])
+        if profile is None:
+            profile = create_instance_profile(options['cluster_name'])
+
+    instance_profile = {'Arn': profile['Arn']}
     params = dict(params,
                   MinCount=1,
                   MaxCount=1,
                   SecurityGroupIds=[sg['GroupId']
                                     for sg in saved_instance['SecurityGroups']],
-                  IamInstanceProfile=instanceProfile)
+                  IamInstanceProfile=instance_profile)
 
     options_to_api = {'taupage_ami_id': 'ImageId'}
 #                      'instance_type': 'InstanceType'}
@@ -250,7 +274,14 @@ def configure_instance(ec2: object, volume: dict, options: dict):
 
     # TODO: we should have another transition to wait for Cassandra to
     # jump to Normal, before declaring it complete
-    set_state(ec2, volume, 'completed')
+    set_state(ec2, volume, 'configured')
+
+
+def check_node_status(ec2: object, volume: dict):
+    down_count = get_cluster_status().get('DownEndpointCount')
+    logger.info("DownEndpointCount: {}".format(down_count))
+    if down_count == 0:
+        set_state(ec2, volume, 'completed')
 
 
 def cleanup_state(ec2: object, volume: dict):
@@ -261,7 +292,7 @@ def cleanup_state(ec2: object, volume: dict):
 
 def step_forward(ec2: object, volume_id: str, options: dict):
     volume = get_volume(ec2, volume_id)
-    tags = tags_as_dict(volume['Tags'])
+    tags = tags_as_dict(volume.get('Tags', []))
     if tags.get('planb:operation') != 'update':
         raise Exception("Volume {} not prepared for operation 'update'".format(volume_id))
 
@@ -280,6 +311,9 @@ def step_forward(ec2: object, volume_id: str, options: dict):
 
     elif state == 'created':
         configure_instance(ec2, volume, options)
+
+    elif state == 'configured':
+        check_node_status(ec2, volume)
 
     elif state == 'completed':
         cleanup_state(ec2, volume)
@@ -368,7 +402,7 @@ def update_cluster(options: dict):
         try:
             volume_id = find_data_volume_id(ec2, i)
             volume = get_volume(ec2, volume_id)
-            tags = tags_as_dict(volume['Tags'])
+            tags = tags_as_dict(volume.get('Tags', []))
             if 'planb:operation:state' not in tags:
                 tag_instance_volume(ec2, volume, tags, i, options['cluster_name'])
 
@@ -377,6 +411,14 @@ def update_cluster(options: dict):
 
             # clean up any stale instance data dump file
             os.unlink(instance_filename(volume))
+
+        except ClusterUnhealthyException:
+            sys.stderr.write("""
+Some nodes are DOWN.  Not updating anything!
+
+Please make sure all nodes are UP before proceeding with update.
+            """)
+            return
 
         finally:
             ssh.terminate()
