@@ -174,6 +174,7 @@ Available options for update:
 --cluster-name         The name of your cluster (required)
 --odd-host             The Odd host in the region of your VPC (required)
 --region               The region where the update should be applied (required)
+--force-termination    Disable termination protection for the duration of update
 --docker-image         The full specified name of the Docker image
 --taupage-ami-id       The full specified name of the AMI
 =================      ========================================================

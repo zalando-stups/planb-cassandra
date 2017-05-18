@@ -81,11 +81,13 @@ def create(regions: list,
 @click.option('--cluster-name', type=str, required=True)
 @click.option('--odd-host', '-O', type=str, required=True)
 @click.option('--region', type=str, required=True)
+@click.option('--force-termination', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
 def update(cluster_name: str,
            odd_host: str,
            region: str,
+           force_termination: bool,
            docker_image: str,
            taupage_ami_id: str):
 
