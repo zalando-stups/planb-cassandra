@@ -84,12 +84,16 @@ def create(regions: list,
 @click.option('--force-termination', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
+@click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
+@click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
 def update(cluster_name: str,
            odd_host: str,
            region: str,
            force_termination: bool,
            docker_image: str,
-           taupage_ami_id: str):
+           taupage_ami_id: str,
+           sns_topic: str,
+           sns_email: str):
 
     if not(docker_image or taupage_ami_id):
         raise click.UsageError("Please specify at least one of --docker-image or --taupage-ami-id")

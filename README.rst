@@ -166,7 +166,12 @@ the last used node.
 
     $ zaws re $ACCOUNT
     $ piu re -O $ODDHOST $ODDHOST
-    $ ./planb.py update --cluster-name mycluster --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 --region eu-central-1 -O $ODDHOST
+    $ ./planb.py update --cluster-name mycluster \
+        --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 \
+        --region eu-central-1 \
+        -O $ODDHOST \
+        --sns-topic planb-cassandra-system-event \
+        --sns-email test@example.com
 
 Available options for update:
 
@@ -177,6 +182,8 @@ Available options for update:
 --force-termination    Disable termination protection for the duration of update
 --docker-image         The full specified name of the Docker image
 --taupage-ami-id       The full specified name of the AMI
+--sns-topic            Amazon SNS topic name to use for notifications about Auto-Recovery.
+--sns-email            Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 =================      ========================================================
 
 
