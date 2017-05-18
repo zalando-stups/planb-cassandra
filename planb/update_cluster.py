@@ -358,6 +358,17 @@ def step_forward(ec2: object, volume_id: str, options: dict):
     return True
 
 
+def ssh_command_works(odd_host: str) -> bool:
+    ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'])
+    try:
+        out, err = ssh.communicate(timeout=5)
+        return out == 'test-ssh\n'
+    except Exception as e:
+        logger.error("Failed to open SSH connection to the Odd host: {}".format(e))
+        ssh.kill()
+        ssh.communicate()
+
+
 def open_ssh_tunnel(odd_host: str, instance: dict) -> object:
 
     if is_local_jolokia_port_open():
@@ -420,7 +431,11 @@ def update_cluster(options: dict):
             if not click.confirm(question):
                 continue
 
-        # TODO: this fails miserably when piu access expired
+        if not ssh_command_works(options['odd_host']):
+            click.echo("Cannot ssh to the Odd host!" \
+                       .format(local_jolokia_port), err=True)
+            return
+
         ssh = open_ssh_tunnel(options['odd_host'], i)
         if not ssh:
             click.echo("Cannot forward local port {} via ssh!" \
