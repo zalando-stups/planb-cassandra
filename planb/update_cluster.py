@@ -365,10 +365,11 @@ def step_forward(ec2: object, volume_id: str, options: dict):
 
 
 def ssh_command_works(odd_host: str) -> bool:
-    ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'])
+    ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'],
+                           stdout=subprocess.PIPE)
     try:
         out, err = ssh.communicate(timeout=5)
-        return out == 'test-ssh\n'
+        return out == b'test-ssh\n'
     except Exception as e:
         logger.error("Failed to open SSH connection to the Odd host: {}".format(e))
         ssh.kill()
