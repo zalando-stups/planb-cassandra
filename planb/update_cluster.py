@@ -332,8 +332,13 @@ def step_forward(ec2: object, volume_id: str, options: dict):
 
 def ssh_command_works(odd_host: str):
     ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'])
-    out, err = ssh.communicate()
-    return out == 'test-ssh\n'
+    try:
+        out, err = ssh.communicate(timeout=5)
+        return out == 'test-ssh\n'
+    except Exception as e:
+        logger.error("Failed to open SSH connection to the Odd host: {}".format(e))
+        ssh.kill()
+        ssh.communicate()
 
 
 def open_ssh_tunnel(odd_host: str, instance: dict) -> object:
