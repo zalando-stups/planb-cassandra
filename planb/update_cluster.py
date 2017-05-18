@@ -7,6 +7,7 @@ import base64
 import click
 import yaml
 import time
+import sys
 import re
 import io
 import os
@@ -17,7 +18,8 @@ from .common import ec2_client, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    create_instance_profile
+    override_ephemeral_block_devices, create_auto_recovery_alarm, \
+    create_instance_profile, get_instance_profile
 
 
 """
@@ -31,6 +33,11 @@ logger = logging.getLogger(__name__)
 # TODO: may be this port is occupied?
 local_jolokia_port = 8778
 remote_jolokia_port = 8778
+jolokia_url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
+
+
+class ClusterUnhealthyException(Exception):
+    pass
 
 
 def text_timestamp():
@@ -121,6 +128,12 @@ def get_user_data(ec2: object, instance_id: str) -> dict:
     return yaml.safe_load(stream)
 
 
+def is_api_termination_disabled(ec2: object, instance_id: str) -> dict:
+    resp = ec2.describe_instance_attribute(InstanceId=instance_id,
+                                           Attribute='disableApiTermination')
+    return resp['DisableApiTermination']['Value']
+
+
 def instance_filename(volume: dict):
     return "{}.json".format(volume['VolumeId'])
 
@@ -129,17 +142,22 @@ def list_instance_dump_files() -> list:
     return [x for x in os.listdir() if re.match('^vol-\w+\.json$', x)]
 
 
-# TODO: when there's no tunnel: private_ip: str ?
-def drain_cassandra():
-    url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
-    # TODO: what about timeout?
-    requests.post(url,
-                  json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
-                         'type': 'exec',
-                         'operation': 'drain'}])
+def get_cluster_status() -> dict:
+    try:
+        queries = [{'mbean': 'org.apache.cassandra.net:type=FailureDetector',
+                    'type': 'read'}]
+        response = requests.post(jolokia_url, json=queries).json()
+        if len(response) == 1:
+            return response[0].get('value', {})
+        return {}
+    except requests.exceptions.ConnectionError:
+        return {}
 
 
-def drain_node(ec2: object, volume: dict):
+def prepare_update(ec2: object, volume: dict, options: dict):
+    if get_cluster_status().get('DownEndpointCount') != 0:
+        raise ClusterUnhealthyException()
+
     instance = find_instance_from_volume(ec2, volume)
     if not instance:
         set_error_state(ec2, volume, "Cannot find instance for {}" \
@@ -147,10 +165,37 @@ def drain_node(ec2: object, volume: dict):
         return
 
     instance_id = instance['InstanceId']
-    instance_to_dump = dict(instance, UserData=get_user_data(ec2, instance_id))
-    dump_dict_as_file(instance_to_dump, instance_filename(volume))
+    disable_api_termination = is_api_termination_disabled(ec2, instance_id)
 
-    logger.info("Draining node {}".format(instance['PrivateIpAddress']))
+    instance_dump_file = instance_filename(volume)
+    if not os.path.exists(instance_dump_file):
+        instance_to_dump = dict(instance,
+                                UserData=get_user_data(ec2, instance_id),
+                                DisableApiTermination=disable_api_termination)
+        dump_dict_as_file(instance_to_dump, instance_dump_file)
+
+    if disable_api_termination:
+        if options['force_termination']:
+            ec2.modify_instance_attribute(InstanceId=instance_id,
+                                          DisableApiTermination={'Value': False})
+        else:
+            logger.info("Instance termination is disabled.")
+            set_error_state(ec2, volume, "API termination is disabled")
+            return
+
+    set_state(ec2, volume, 'prepared')
+
+
+def drain_cassandra():
+    # TODO: what about timeout?
+    requests.post(jolokia_url,
+                  json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
+                         'type': 'exec',
+                         'operation': 'drain'}])
+
+
+def drain_node(ec2: object, volume: dict, saved_instance: dict):
+    logger.info("Draining node {}".format(saved_instance['PrivateIpAddress']))
     drain_cassandra()
 
     set_state(ec2, volume, 'drained')
@@ -181,17 +226,22 @@ def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
                           'InstanceType',
                           'SubnetId',
                           'PrivateIpAddress',
-                          'UserData'])
-    instanceProfile={'Arn':
-                         saved_instance['IamInstanceProfile']['Arn']
-                         if 'IamInstanceProfile' in saved_instance
-                         else create_instance_profile(options['cluster_name'])}
+                          'UserData',
+                          'DisableApiTermination'])
+    if 'IamInstanceProfile' in saved_instance:
+        profile = saved_instance['IamInstanceProfile']
+    else:
+        profile = get_instance_profile(options['cluster_name'])
+        if profile is None:
+            profile = create_instance_profile(options['cluster_name'])
+
+    instance_profile = {'Arn': profile['Arn']}
     params = dict(params,
                   MinCount=1,
                   MaxCount=1,
                   SecurityGroupIds=[sg['GroupId']
                                     for sg in saved_instance['SecurityGroups']],
-                  IamInstanceProfile=instanceProfile)
+                  IamInstanceProfile=instance_profile)
 
     options_to_api = {'taupage_ami_id': 'ImageId'}
 #                      'instance_type': 'InstanceType'}
@@ -256,7 +306,14 @@ def configure_instance(ec2: object, volume: dict, options: dict):
 
     # TODO: we should have another transition to wait for Cassandra to
     # jump to Normal, before declaring it complete
-    set_state(ec2, volume, 'completed')
+    set_state(ec2, volume, 'configured')
+
+
+def check_node_status(ec2: object, volume: dict):
+    down_count = get_cluster_status().get('DownEndpointCount')
+    logger.info("DownEndpointCount: {}".format(down_count))
+    if down_count == 0:
+        set_state(ec2, volume, 'completed')
 
 
 def cleanup_state(ec2: object, volume: dict):
@@ -267,7 +324,7 @@ def cleanup_state(ec2: object, volume: dict):
 
 def step_forward(ec2: object, volume_id: str, options: dict):
     volume = get_volume(ec2, volume_id)
-    tags = tags_as_dict(volume['Tags'])
+    tags = tags_as_dict(volume.get('Tags', []))
     if tags.get('planb:operation') != 'update':
         raise Exception("Volume {} not prepared for operation 'update'".format(volume_id))
 
@@ -276,7 +333,10 @@ def step_forward(ec2: object, volume_id: str, options: dict):
     state = tags.get('planb:operation:state')
     logger.debug("{} planb:operation:state is {}".format(volume_id, state))
     if state == 'init':
-        drain_node(ec2, volume)
+        prepare_update(ec2, volume, options)
+
+    elif state == 'prepared':
+        drain_node(ec2, volume, saved_instance)
 
     elif state == 'drained':
         terminate_instance(ec2, volume, saved_instance)
@@ -286,6 +346,9 @@ def step_forward(ec2: object, volume_id: str, options: dict):
 
     elif state == 'created':
         configure_instance(ec2, volume, options)
+
+    elif state == 'configured':
+        check_node_status(ec2, volume)
 
     elif state == 'completed':
         cleanup_state(ec2, volume)
@@ -300,6 +363,17 @@ def step_forward(ec2: object, volume_id: str, options: dict):
         raise Exception("Unexpected planb:operation:state tag value of {}: {}" \
                         .format(volume_id, state))
     return True
+
+
+def ssh_command_works(odd_host: str) -> bool:
+    ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'])
+    try:
+        out, err = ssh.communicate(timeout=5)
+        return out == 'test-ssh\n'
+    except Exception as e:
+        logger.error("Failed to open SSH connection to the Odd host: {}".format(e))
+        ssh.kill()
+        ssh.communicate()
 
 
 def open_ssh_tunnel(odd_host: str, instance: dict) -> object:
@@ -374,7 +448,11 @@ def update_cluster(options: dict):
             if not click.confirm(question):
                 continue
 
-        # TODO: this fails miserably when piu access expired
+        if not ssh_command_works(options['odd_host']):
+            click.echo("Cannot ssh to the Odd host!" \
+                       .format(local_jolokia_port), err=True)
+            return
+
         ssh = open_ssh_tunnel(options['odd_host'], i)
         if not ssh:
             click.echo("Cannot forward local port {} via ssh!" \
@@ -384,7 +462,7 @@ def update_cluster(options: dict):
         try:
             volume_id = find_data_volume_id(ec2, i)
             volume = get_volume(ec2, volume_id)
-            tags = tags_as_dict(volume['Tags'])
+            tags = tags_as_dict(volume.get('Tags', []))
             if 'planb:operation:state' not in tags:
                 tag_instance_volume(ec2, volume, tags, i, options['cluster_name'])
 
@@ -392,7 +470,17 @@ def update_cluster(options: dict):
                 time.sleep(5)
 
             # clean up any stale instance data dump file
-            os.unlink(instance_filename(volume))
+            instance_dump_file = instance_filename(volume)
+            if os.path.exists(instance_dump_file):
+                os.unlink(instance_dump_file)
+
+        except ClusterUnhealthyException:
+            sys.stderr.write("""
+Some nodes are DOWN.  Not updating anything!
+
+Please make sure all nodes are UP before proceeding with update.
+            """)
+            return
 
         finally:
             ssh.terminate()

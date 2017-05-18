@@ -34,7 +34,6 @@ def cli(debug: bool):
 @click.option('--use-dmz', is_flag=True, default=False, help='deploy into DMZ subnets using Public IP addresses')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-key')
-@click.option('--appdynamics-application', help='Please specify the appdynamics application name to be used')
 @click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
 @click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
 @click.option('--environment', '-e', multiple=True)
@@ -52,7 +51,6 @@ def create(regions: list,
            use_dmz: bool,
            hosted_zone: str,
            scalyr_key: str,
-           appdynamics_application: str,
            artifact_name: str,
            docker_image: str,
            environment: list,
@@ -83,6 +81,7 @@ def create(regions: list,
 @click.option('--cluster-name', type=str, required=True)
 @click.option('--odd-host', '-O', type=str, required=True)
 @click.option('--region', type=str, required=True)
+@click.option('--force-termination', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
 @click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
@@ -90,6 +89,7 @@ def create(regions: list,
 def update(cluster_name: str,
            odd_host: str,
            region: str,
+           force_termination: bool,
            docker_image: str,
            taupage_ami_id: str,
            sns_topic: str,
