@@ -330,7 +330,7 @@ def step_forward(ec2: object, volume_id: str, options: dict):
     return True
 
 
-def ssh_command_works(odd_host: str):
+def ssh_command_works(odd_host: str) -> bool:
     ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'])
     try:
         out, err = ssh.communicate(timeout=5)
