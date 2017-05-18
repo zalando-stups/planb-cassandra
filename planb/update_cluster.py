@@ -18,7 +18,6 @@ from .common import ec2_client, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    override_ephemeral_block_devices, create_auto_recovery_alarm, \
     create_instance_profile, get_instance_profile
 
 
