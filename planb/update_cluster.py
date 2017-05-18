@@ -126,6 +126,12 @@ def get_user_data(ec2: object, instance_id: str) -> dict:
     return yaml.safe_load(stream)
 
 
+def is_api_termination_disabled(ec2: object, instance_id: str) -> dict:
+    resp = ec2.describe_instance_attribute(InstanceId=instance_id,
+                                           Attribute='disableApiTermination')
+    return resp['DisableApiTermination']['Value']
+
+
 def instance_filename(volume: dict):
     return "{}.json".format(volume['VolumeId'])
 
@@ -146,16 +152,7 @@ def get_cluster_status() -> dict:
         return {}
 
 
-# TODO: when there's no tunnel: private_ip: str ?
-def drain_cassandra():
-    # TODO: what about timeout?
-    requests.post(jolokia_url,
-                  json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
-                         'type': 'exec',
-                         'operation': 'drain'}])
-
-
-def drain_node(ec2: object, volume: dict):
+def prepare_update(ec2: object, volume: dict, options: dict):
     if get_cluster_status().get('DownEndpointCount') != 0:
         raise ClusterUnhealthyException()
 
@@ -166,10 +163,37 @@ def drain_node(ec2: object, volume: dict):
         return
 
     instance_id = instance['InstanceId']
-    instance_to_dump = dict(instance, UserData=get_user_data(ec2, instance_id))
-    dump_dict_as_file(instance_to_dump, instance_filename(volume))
+    disable_api_termination = is_api_termination_disabled(ec2, instance_id)
 
-    logger.info("Draining node {}".format(instance['PrivateIpAddress']))
+    instance_dump_file = instance_filename(volume)
+    if not os.path.exists(instance_dump_file):
+        instance_to_dump = dict(instance,
+                                UserData=get_user_data(ec2, instance_id),
+                                DisableApiTermination=disable_api_termination)
+        dump_dict_as_file(instance_to_dump, instance_dump_file)
+
+    if disable_api_termination:
+        if options['force_termination']:
+            ec2.modify_instance_attribute(InstanceId=instance_id,
+                                          DisableApiTermination={'Value': False})
+        else:
+            logger.info("Instance termination is disabled.")
+            set_error_state(ec2, volume, "API termination is disabled")
+            return
+
+    set_state(ec2, volume, 'prepared')
+
+
+def drain_cassandra():
+    # TODO: what about timeout?
+    requests.post(jolokia_url,
+                  json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
+                         'type': 'exec',
+                         'operation': 'drain'}])
+
+
+def drain_node(ec2: object, volume: dict, saved_instance: dict):
+    logger.info("Draining node {}".format(saved_instance['PrivateIpAddress']))
     drain_cassandra()
 
     set_state(ec2, volume, 'drained')
@@ -200,7 +224,8 @@ def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
                           'InstanceType',
                           'SubnetId',
                           'PrivateIpAddress',
-                          'UserData'])
+                          'UserData',
+                          'DisableApiTermination'])
     if 'IamInstanceProfile' in saved_instance:
         profile = saved_instance['IamInstanceProfile']
     else:
@@ -301,7 +326,10 @@ def step_forward(ec2: object, volume_id: str, options: dict):
     state = tags.get('planb:operation:state')
     logger.debug("{} planb:operation:state is {}".format(volume_id, state))
     if state == 'init':
-        drain_node(ec2, volume)
+        prepare_update(ec2, volume, options)
+
+    elif state == 'prepared':
+        drain_node(ec2, volume, saved_instance)
 
     elif state == 'drained':
         terminate_instance(ec2, volume, saved_instance)
@@ -420,7 +448,9 @@ def update_cluster(options: dict):
                 time.sleep(5)
 
             # clean up any stale instance data dump file
-            os.unlink(instance_filename(volume))
+            instance_dump_file = instance_filename(volume)
+            if os.path.exists(instance_dump_file):
+                os.unlink(instance_dump_file)
 
         except ClusterUnhealthyException:
             sys.stderr.write("""
