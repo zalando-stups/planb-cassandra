@@ -133,7 +133,7 @@ create your application user and the first schema:
 
     $ piu 172.31.1.1 "initial Cassandra setup"  # replace private IP
     $ docker exec -it taupageapp bash
-    (docker)$ cqlsh -u cassandra -p $ADMIN_PASSWORD
+    (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
     cqlsh> CREATE USER myuser WITH PASSWORD '...' NOSUPERUSER;
     cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
 
