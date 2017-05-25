@@ -5,14 +5,16 @@ MAINTAINER Zalando SE
 # SSL Storage Port, Jolokia Agent, JMX,  CQL Native
 EXPOSE 7001 7199 8778 9042 
 
-ENV CASSIE_VERSION=39x
+ENV CASSIE_VERSION=3.10
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN echo "deb http://www.apache.org/dist/cassandra/debian ${CASSIE_VERSION} main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
+RUN echo "deb http://www.apache.org/dist/cassandra/debian 310x main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
 RUN curl https://www.apache.org/dist/cassandra/KEYS | apt-key add -
 
 RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
-RUN apt-get -y install vim less sysstat cassandra && \
+RUN apt-get -y install vim less sysstat \
+    cassandra=$CASSIE_VERSION \
+    cassandra-tools=$CASSIE_VERSION && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
