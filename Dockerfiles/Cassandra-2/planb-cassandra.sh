@@ -1,95 +1,66 @@
 #!/bin/sh
 # CLUSTER_NAME
-# NUM_TOKENS
-# LISTEN_ADDRESS
-# BROADCAST_ADDRESS
-# SNITCH
-# CASSANDRA_DATA_DIR
+# CASSANDRA_DIR
+# CASSANDRA_CONF
 # TRUSTSTORE
 # KEYSTORE
 # ADMIN_PASSWORD
-# MEMTABLE_FLUSH_WRITERS
-# CONCURRENT_COMPACTORS
 
-if [ -z "$CLUSTER_NAME" ] ;
-then
-    echo "Cluster name is not defined."
-    exit 1
-fi
+export CASSANDRA_DIR=${CASSANDRA_DIR:-/var/lib/cassandra}
 
-EC2_META_URL=http://169.254.169.254/latest/meta-data
-
-if [ -z "$LISTEN_ADDRESS" ] ;
-then
-    export LISTEN_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/local-ipv4)
-fi
-echo "Local IP address is $LISTEN_ADDRESS ..."
-
-if [ "x$SUBNET_TYPE" = xinternal ];
-then
-    export BROADCAST_ADDRESS=$LISTEN_ADDRESS
-
-    if [ -z $SNITCH ] ;
-    then
-        export SNITCH="Ec2Snitch"
+export CASSANDRA_CONF=${CASSANDRA_CONF:-/var/lib/cassandra/conf}
+if [ ! -d "$CASSANDRA_CONF" ]; then
+    if [ -z "$CLUSTER_NAME" ]; then
+        echo "CLUSTER_NAME must be set"
+        exit 1
     fi
-else
-    while [ -z "$BROADCAST_ADDRESS" ] ;
-    do
-        echo "Waiting for Public IP address to be assigned ..."
-        export BROADCAST_ADDRESS=$(curl -Ls -m 4 ${EC2_META_URL}/public-ipv4)
-        sleep 5
-    done
-
-    if [ -z $SNITCH ] ;
-    then
-        export SNITCH="Ec2MultiRegionSnitch"
+    if [ -z "$TRUSTSTORE" ]; then
+        echo "TRUSTSTORE must be set (base64 encoded)."
+        exit 1
     fi
+    if [ -z "$KEYSTORE" ]; then
+        echo "KEYSTORE must be set (base64 encoded)."
+        exit 1
+    fi
+
+    # copy default config from package-installed /etc/cassandra
+    cp -r /etc/cassandra/ "$CASSANDRA_CONF"
+
+    echo $TRUSTSTORE | base64 -d > "$CASSANDRA_CONF/truststore"
+    echo $KEYSTORE   | base64 -d > "$CASSANDRA_CONF/keystore"
+
+    ncores=$(grep -c ^processor /proc/cpuinfo)
+    ncores_4=$(( ncores / 4 ))
+    [ $ncores_4 -gt 0 ] || ncores_4=1
+
+    echo "Generating configuration from template ..."
+    merge-yaml.py \
+        "$(cat "$CASSANDRA_CONF/cassandra.yaml-original")" \
+        "\
+# unset some parameters to reset defaults
+listen_address:
+broadcast_address:
+data_file_directories:
+commitlog_directory:
+saved_caches_directory:
+
+# enforce password check
+authenticator: PasswordAuthenticator
+authorizer: CassandraAuthorizer
+
+concurrent_compactors: ${ncores_4}
+memtable_flush_writers: ${ncores_4}
+
+# protect internode traffic
+server_encryption_options:
+    internode_encryption: all
+    keystore: $CASSANDRA_CONF/keystore
+    keystore_password: $CLUSTER_NAME
+    truststore: $CASSANDRA_CONF/truststore
+    truststore_password: $CLUSTER_NAME" \
+        "$YAML_CONFIG" \
+        >"$CASSANDRA_CONF/cassandra.yaml"
 fi
-echo "Broadcast IP address is $BROADCAST_ADDRESS ..."
-
-export CASSANDRA_DATA_DIR=${CASSANDRA_DATA_DIR:-/var/lib/cassandra}
-
-if [ -z "$TRUSTSTORE" ]; then
-    echo "TRUSTSTORE must be set (base64 encoded)."
-    exit 1
-fi
-
-if [ -z "$KEYSTORE" ]; then
-    echo "KEYSTORE must be set (base64 encoded)."
-    exit 1
-fi
-
-echo $TRUSTSTORE | base64 -d > /etc/cassandra/truststore
-echo $KEYSTORE | base64 -d > /etc/cassandra/keystore
-
-echo "Finished bootstrapping node."
-# Add route 53record seed1.${CLUSTER_NAME}.domain.tld ?
-
-ncores=$(grep -c ^processor /proc/cpuinfo)
-ncores_4=$(( ncores / 4 ))
-[ $ncores_4 -gt 0 ] || ncores_4=1
-
-#
-# Assuming we are using SSD storage, set memtable_flush_writers to the
-# number of CPU cores divided by 4:
-#
-if [ -z "$MEMTABLE_FLUSH_WRITERS" ]; then
-    export MEMTABLE_FLUSH_WRITERS=$ncores_4
-fi
-
-# the same for concurrent_compactors setting:
-if [ -z "$CONCURRENT_COMPACTORS" ]; then
-    export CONCURRENT_COMPACTORS=$ncores_4
-fi
-
-# NUM_TOKENS defaults to 256
-if [ -z "$NUM_TOKENS" ]; then
-    export NUM_TOKENS=256
-fi
-
-echo "Generating configuration from template ..."
-python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
 
 echo "Starting Cassandra ..."
 /usr/sbin/cassandra -f &

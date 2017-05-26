@@ -8,6 +8,7 @@ import netaddr
 import random
 import string
 import base64
+import yaml
 import time
 import sys
 import re
@@ -359,6 +360,18 @@ def generate_taupage_user_data(options: dict) -> str:
         for region, ips in options['seed_nodes'].items()
         for ip in ips
     ]
+    snitch = 'Ec2MultiRegionSnitch' if options['use_dmz'] else 'Ec2Snitch'
+    config = {
+        'cluster_name': options['cluster_name'],
+        'num_tokens': options['num_tokens'],
+        'endpoint_snitch': snitch,
+        'seed_provider': [{
+            'class_name': 'org.apache.cassandra.locator.SimpleSeedProvider',
+            'parameters': [{
+                'seeds': all_seeds
+            }]
+        }]
+    }
     data = {
         'runtime': 'Docker',
         'source': options['docker_image'],
@@ -372,13 +385,11 @@ def generate_taupage_user_data(options: dict) -> str:
         'environment': {
             'CLUSTER_NAME': options['cluster_name'],
             'CLUSTER_SIZE': options['cluster_size'],
-            'NUM_TOKENS': options['num_tokens'],
             'REGIONS': ' '.join(options['regions']),
-            'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
-            'SEEDS': ','.join(all_seeds),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
             'TRUSTSTORE': str(truststore_base64, 'UTF-8'),
-            'ADMIN_PASSWORD': generate_password()
+            'ADMIN_PASSWORD': generate_password(),
+            'YAML_CONFIG': yaml.safe_dump(config)
         },
         'volumes': {
             'ebs': {

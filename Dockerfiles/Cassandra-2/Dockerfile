@@ -12,7 +12,7 @@ RUN echo "deb http://www.apache.org/dist/cassandra/debian 21x main" | tee -a /et
 RUN curl https://www.apache.org/dist/cassandra/KEYS | apt-key add -
 
 RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
-RUN apt-get -y install vim less sysstat \
+RUN apt-get -y install vim less sysstat python-yaml \
     cassandra=$CASSIE_VERSION \
     cassandra-tools=$CASSIE_VERSION && \
     apt-get clean && \
@@ -26,16 +26,16 @@ RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" >
 RUN md5sum --check /tmp/jolokia-jvm-agent.jar.md5
 RUN rm -f /tmp/jolokia-jvm-agent.jar.md5
 
-COPY cassandra_template.yaml /etc/cassandra/
+RUN mv /etc/cassandra/cassandra.yaml /etc/cassandra/cassandra.yaml-original
+RUN mv /etc/cassandra/cassandra-env.sh /etc/cassandra/cassandra-env.sh-original
 COPY cassandra-env.sh /etc/cassandra/
-COPY cassandra-env.sh-original /etc/cassandra/
+
+COPY cassandra.in.sh /usr/share/cassandra
 
 # Override logging: STDOUT only
 COPY logback.xml /etc/cassandra/
 
-RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
-
-COPY planb-cassandra.sh /usr/local/bin/
+COPY planb-cassandra.sh merge-yaml.py /usr/local/bin/
 
 ENV HOME=/var/lib/cassandra
 WORKDIR $HOME
