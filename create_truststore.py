@@ -5,6 +5,7 @@ import os
 import base64
 from subprocess import check_call, call
 
+
 def generate_certificate(cluster_name: str):
     check = call(["which", "keytool"])
     if check:

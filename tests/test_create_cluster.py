@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import MagicMock
 
-from planb.create_cluster import *
+from planb.create_cluster import generate_private_ip_addresses, \
+    IpAddressPoolDepletedException, read_environment
 
 
 def test_generate_private_ip_addresses():
@@ -27,30 +28,38 @@ def test_generate_private_ip_addresses():
     #
     expected_ips = {
         'eu-central-1': [
-            '171.31.0.11', '171.31.8.11', '171.31.0.12', '171.31.8.12', '171.31.0.13'
+            '171.31.0.11', '171.31.8.11', '171.31.0.12',
+            '171.31.8.12', '171.31.0.13'
         ],
         'eu-west-1': [
-            '171.31.0.11', '171.31.8.11', '171.31.16.11', '171.31.0.12', '171.31.8.12'
+            '171.31.0.11', '171.31.8.11', '171.31.16.11',
+            '171.31.0.12', '171.31.8.12'
         ]
     }
 
     cluster_size = 5
 
     for region, subnets in region_subnets.items():
-        assert list(generate_private_ip_addresses(ec2, subnets, cluster_size)) == expected_ips[region]
+        iplist = list(generate_private_ip_addresses(ec2, subnets, cluster_size))
+        assert iplist == expected_ips[region]
 
     with pytest.raises(IpAddressPoolDepletedException):
-        print(list(generate_private_ip_addresses(ec2, [{'CidrBlock': '192.168.1.0/29'}], 10)))
+        print(list(generate_private_ip_addresses(
+                    ec2, [{'CidrBlock': '192.168.1.0/29'}], 10
+        )))
 
-    list(generate_private_ip_addresses(ec2, [{'CidrBlock': '192.168.1.0/27'}], 20))
+    list(generate_private_ip_addresses(
+            ec2, [{'CidrBlock': '192.168.1.0/27'}], 20
+        ))
 
     with pytest.raises(IpAddressPoolDepletedException):
-        list(generate_private_ip_addresses(ec2, [{'CidrBlock': '192.168.1.0/27'}], 21))
+        list(generate_private_ip_addresses(
+                ec2, [{'CidrBlock': '192.168.1.0/27'}], 21
+            ))
 
 
 def test_read_environment():
-    raw_list = ["key=value",
-                "base64=dGVzdA=="]
-    parsed_dict = {'key': 'value',
-                   'base64': 'dGVzdA=='}
-    assert read_environment({'environment': raw_list}) == {'environment': parsed_dict}
+    raw_list = ["key=value", "base64=dGVzdA=="]
+    parsed_dict = {'key': 'value', 'base64': 'dGVzdA=='}
+    expected = {'environment': parsed_dict}
+    assert read_environment({'environment': raw_list}) == expected
