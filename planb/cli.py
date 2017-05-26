@@ -66,15 +66,20 @@ def create(regions: list,
     #
     cluster_name_re = '^[a-z][a-z0-9-]{4,}[a-z0-9]$'
     if not re.match(cluster_name_re, cluster_name):
-        raise click.UsageError('Cluster name must be at least 6 characters long, it may only contain lowercase latin letters, digits and dashes (it also must start with a letter and cannot end with a dash), in other words it must be matched by the following regular expression: {}'.format(cluster_name_re))
+        msg = 'Cluster name must matched by the following regular expression: {}'
+        raise click.UsageError(msg.format(cluster_name_re))
 
     if not regions:
         raise click.UsageError('Please specify at least one region')
 
     if len(regions) > 1 and not(use_dmz):
-        raise click.UsageError('You must specify --use-dmz when deploying multi-region.')
+        raise click.UsageError('Multi-region deployment requires --use-dmz')
 
     create_cluster(options=locals())
+
+
+sns_topic_help = 'SNS topic name to send Auto-Recovery notifications to'
+sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 
 
 @cli.command()
@@ -84,8 +89,8 @@ def create(regions: list,
 @click.option('--force-termination', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
-@click.option('--sns-topic', help='SNS topic name to send Auto-Recovery notifications to')
-@click.option('--sns-email', help='Email address to subscribe to Auto-Recovery SNS topic')
+@click.option('--sns-topic', help=sns_topic_help)
+@click.option('--sns-email', help=sns_email_help)
 def update(cluster_name: str,
            odd_host: str,
            region: str,
@@ -96,7 +101,8 @@ def update(cluster_name: str,
            sns_email: str):
 
     if not(docker_image or taupage_ami_id):
-        raise click.UsageError("Please specify at least one of --docker-image or --taupage-ami-id")
+        msg = "Please specify at least one of --docker-image or --taupage-ami-id"
+        raise click.UsageError(msg)
 
     update_cluster(options=locals())
 

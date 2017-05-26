@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
-from planb.update_cluster import *
+from planb.update_cluster import select_keys, tags_as_dict, \
+    get_user_data, build_run_instances_params
 
 
 def test_select_keys():
@@ -52,7 +53,7 @@ def test_build_run_instances_params():
         'docker_image': 'docker.registry/cassandra:123',
         'taupage_ami_id': 'ami-654321'
     }
-    result = {
+    expected = {
         'MinCount': 1,
         'MaxCount': 1,
         'ImageId': 'ami-654321',
@@ -76,4 +77,5 @@ def test_build_run_instances_params():
             }
         }
     }
-    assert build_run_instances_params(ec2, volume, saved_instance, options) == result
+    actual = build_run_instances_params(ec2, volume, saved_instance, options)
+    assert actual == expected

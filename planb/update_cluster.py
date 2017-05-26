@@ -44,13 +44,16 @@ def text_timestamp():
 
 
 def select_keys(d: dict, keys: list):
-    return {k: v for k,v in d.items() if k in keys}
+    return {k: v for k, v in d.items() if k in keys}
 
 
 def create_tags(ec2: object, resource_id: str, tags: dict):
     # TODO: make sure this is retried on throttling/ratelimit error
-    ec2.create_tags(Resources=[resource_id],
-                    Tags=[{'Key': k, 'Value': v} for k, v in tags.items()])
+    ec2.create_tags(
+        Resources=[resource_id],
+        Tags=[{'Key': k, 'Value': v}
+              for k, v in tags.items()]
+    )
 
 
 def tags_as_dict(tags: list) -> dict:
@@ -58,25 +61,28 @@ def tags_as_dict(tags: list) -> dict:
 
 
 def update_tags(ec2: object, resource_id: str, tags: dict):
-    create_tags(ec2, resource_id,
-                dict(tags, **{'planb:operation:last-modified': text_timestamp()}))
+    create_tags(
+        ec2, resource_id,
+        dict(tags, **{'planb:operation:last-modified': text_timestamp()})
+    )
 
 
 def set_state(ec2: object, volume: dict, state: str):
-    logger.debug("State transition on {} to {}".format(volume['VolumeId'], state))
     update_tags(ec2, volume['VolumeId'], {'planb:operation:state': state})
 
 
 def set_error_state(ec2: object, volume: dict, message: str):
-    update_tags(ec2, volume['VolumeId'], {'planb:operation:state': 'failed',
-                                          'planb:update:fail-reason': message})
+    update_tags(
+        ec2, volume['VolumeId'],
+        {'planb:operation:state': 'failed', 'planb:update:fail-reason': message}
+    )
 
 
 def get_instance(ec2: object, instance_id: str) -> dict:
     resp = ec2.describe_instances(InstanceIds=[instance_id])
     reservations = resp['Reservations']
     if len(reservations) != 1:
-        logger.error("Unexpected number of reservations for {}: {} != 1" \
+        logger.error("Unexpected number of reservations for {}: {} != 1"
                      .format(instance_id, len(reservations)))
         return None
     return reservations[0]['Instances'][0]
@@ -87,11 +93,14 @@ def get_volume(ec2: object, volume_id: str) -> dict:
     return resp['Volumes'][0]
 
 
-def tag_instance_volume(ec2: object, volume: dict, tags: dict, instance: dict,
-                        cluster_name: str):
-    new_tags = {'planb:operation': 'update',
-                'planb:operation:start-time': text_timestamp(),
-                'planb:operation:state': 'init'}
+def tag_instance_volume(
+        ec2: object, volume: dict, tags: dict, instance: dict,
+        cluster_name: str):
+    new_tags = {
+        'planb:operation': 'update',
+        'planb:operation:start-time': text_timestamp(),
+        'planb:operation:state': 'init'
+    }
 
     desired_name_tag = "{}-{}".format(cluster_name, instance['PrivateIpAddress'])
     if tags.get('Name') != desired_name_tag:
@@ -101,17 +110,19 @@ def tag_instance_volume(ec2: object, volume: dict, tags: dict, instance: dict,
 
 
 def find_data_volume_id(ec2: object, instance: dict) -> dict:
-    v = [m for m in instance['BlockDeviceMappings']
-            if re.match("^/dev/(xv|s)df$", m['DeviceName'])]
+    v = [m
+         for m in instance['BlockDeviceMappings']
+         if re.match("^/dev/(xv|s)df$", m['DeviceName'])]
     return v[0]['Ebs']['VolumeId']
 
 
-def find_instance_from_volume(ec2: object, volume: dict,
-                              log_missing_attachment=True) -> dict:
+def find_instance_from_volume(
+        ec2: object, volume: dict, log_missing_attachment=True) -> dict:
+
     attachments = volume['Attachments']
     if len(attachments) != 1:
         if len(attachments) > 1 or (not(attachments) and log_missing_attachment):
-            logger.error("Unexpected number of attachments for {}: {} != 1" \
+            logger.error("Unexpected number of attachments for {}: {} != 1"
                          .format(volume['VolumeId'], len(attachments)))
         return None
     instance_id = attachments[0]['InstanceId']
@@ -119,8 +130,10 @@ def find_instance_from_volume(ec2: object, volume: dict,
 
 
 def get_user_data(ec2: object, instance_id: str) -> dict:
-    resp = ec2.describe_instance_attribute(InstanceId=instance_id,
-                                           Attribute='userData')
+    resp = ec2.describe_instance_attribute(
+        InstanceId=instance_id,
+        Attribute='userData'
+    )
     raw_bytes = base64.b64decode(resp['UserData']['Value'])
     data = str(raw_bytes, 'UTF-8')
     stream = io.StringIO(data)
@@ -128,8 +141,10 @@ def get_user_data(ec2: object, instance_id: str) -> dict:
 
 
 def is_api_termination_disabled(ec2: object, instance_id: str) -> dict:
-    resp = ec2.describe_instance_attribute(InstanceId=instance_id,
-                                           Attribute='disableApiTermination')
+    resp = ec2.describe_instance_attribute(
+        InstanceId=instance_id,
+        Attribute='disableApiTermination'
+    )
     return resp['DisableApiTermination']['Value']
 
 
@@ -138,13 +153,17 @@ def instance_filename(volume: dict):
 
 
 def list_instance_dump_files() -> list:
-    return [x for x in os.listdir() if re.match('^vol-\w+\.json$', x)]
+    return [x
+            for x in os.listdir()
+            if re.match('^vol-\w+\.json$', x)]
 
 
 def get_cluster_status() -> dict:
     try:
-        queries = [{'mbean': 'org.apache.cassandra.net:type=FailureDetector',
-                    'type': 'read'}]
+        queries = [{
+            'mbean': 'org.apache.cassandra.net:type=FailureDetector',
+            'type': 'read'
+        }]
         response = requests.post(jolokia_url, json=queries).json()
         if len(response) == 1:
             return response[0].get('value', {})
@@ -159,8 +178,10 @@ def prepare_update(ec2: object, volume: dict, options: dict):
 
     instance = find_instance_from_volume(ec2, volume)
     if not instance:
-        set_error_state(ec2, volume, "Cannot find instance for {}" \
-                                     .format(volume['VolumeId']))
+        set_error_state(
+            ec2, volume,
+            "Cannot find instance for {}".format(volume['VolumeId'])
+        )
         return
 
     instance_id = instance['InstanceId']
@@ -168,15 +189,19 @@ def prepare_update(ec2: object, volume: dict, options: dict):
 
     instance_dump_file = instance_filename(volume)
     if not os.path.exists(instance_dump_file):
-        instance_to_dump = dict(instance,
-                                UserData=get_user_data(ec2, instance_id),
-                                DisableApiTermination=disable_api_termination)
+        instance_to_dump = dict(
+            instance,
+            UserData=get_user_data(ec2, instance_id),
+            DisableApiTermination=disable_api_termination
+        )
         dump_dict_as_file(instance_to_dump, instance_dump_file)
 
     if disable_api_termination:
         if options['force_termination']:
-            ec2.modify_instance_attribute(InstanceId=instance_id,
-                                          DisableApiTermination={'Value': False})
+            ec2.modify_instance_attribute(
+                InstanceId=instance_id,
+                DisableApiTermination={'Value': False}
+            )
         else:
             logger.info("Instance termination is disabled.")
             set_error_state(ec2, volume, "API termination is disabled")
@@ -187,16 +212,19 @@ def prepare_update(ec2: object, volume: dict, options: dict):
 
 def drain_cassandra():
     # TODO: what about timeout?
-    requests.post(jolokia_url,
-                  json=[{'mbean': 'org.apache.cassandra.db:type=StorageService',
-                         'type': 'exec',
-                         'operation': 'drain'}])
+    requests.post(
+        jolokia_url,
+        json=[{
+            'mbean': 'org.apache.cassandra.db:type=StorageService',
+            'type': 'exec',
+            'operation': 'drain'
+        }]
+    )
 
 
 def drain_node(ec2: object, volume: dict, saved_instance: dict):
     logger.info("Draining node {}".format(saved_instance['PrivateIpAddress']))
     drain_cassandra()
-
     set_state(ec2, volume, 'drained')
 
 
@@ -218,15 +246,19 @@ def terminate_instance(ec2: object, volume: dict, saved_instance: dict):
         raise Exception("Unexpected state of {}: {}".format(instance_id, state))
 
 
-def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
-                               options: dict) -> dict:
-    params = select_keys(saved_instance,
-                         ['ImageId',
-                          'InstanceType',
-                          'SubnetId',
-                          'PrivateIpAddress',
-                          'UserData',
-                          'DisableApiTermination'])
+def build_run_instances_params(
+        ec2: object, volume: dict, saved_instance: dict, options: dict) -> dict:
+
+    inherited_keys = [
+        'ImageId',
+        'InstanceType',
+        'SubnetId',
+        'PrivateIpAddress',
+        'UserData',
+        'DisableApiTermination'
+    ]
+    params = select_keys(saved_instance, inherited_keys)
+
     if 'IamInstanceProfile' in saved_instance:
         profile = saved_instance['IamInstanceProfile']
     else:
@@ -235,18 +267,21 @@ def build_run_instances_params(ec2: object, volume: dict, saved_instance: dict,
             profile = create_instance_profile(options['cluster_name'])
 
     instance_profile = {'Arn': profile['Arn']}
-    params = dict(params,
-                  MinCount=1,
-                  MaxCount=1,
-                  SecurityGroupIds=[sg['GroupId']
-                                    for sg in saved_instance['SecurityGroups']],
-                  IamInstanceProfile=instance_profile)
+    params = dict(
+        params,
+        MinCount=1,
+        MaxCount=1,
+        SecurityGroupIds=[sg['GroupId']
+                          for sg in saved_instance['SecurityGroups']],
+        IamInstanceProfile=instance_profile
+    )
 
     options_to_api = {'taupage_ami_id': 'ImageId'}
-#                      'instance_type': 'InstanceType'}
-    instance_changes = {v: options[k] for k,v in options_to_api.items()
-                        if options[k]}
-
+    instance_changes = {
+        v: options[k]
+        for k, v in options_to_api.items()
+        if options[k]
+    }
     params = dict(params, **instance_changes)
 
     image = ec2.describe_images(ImageIds=[params['ImageId']])['Images'][0]
@@ -273,12 +308,10 @@ def create_instance(ec2: object, volume: dict, saved_instance: dict,
     params = build_run_instances_params(ec2, volume, saved_instance, options)
     params['UserData'] = dump_user_data_for_taupage(params['UserData'])
 
-    logger.info("Creating new instance with IP {}"\
-                .format(saved_instance['PrivateIpAddress']))
-    resp = ec2.run_instances(**params)
-    instance = resp['Instances'][0]
-    instance_id = instance['InstanceId']
-
+    logger.info(
+        "Creating new instance with IP {}".format(params['PrivateIpAddress'])
+    )
+    ec2.run_instances(**params)
     set_state(ec2, volume, 'created')
 
 
@@ -286,8 +319,9 @@ def configure_instance(ec2: object, volume: dict, options: dict):
     instance = find_instance_from_volume(ec2, volume,
                                          log_missing_attachment=False)
     if not instance:
-        logger.info("Waiting for new instance to attach {}"\
-                    .format(volume['VolumeId']))
+        logger.info(
+            "Waiting for new instance to attach {}".format(volume['VolumeId'])
+        )
         return
 
     instance_id = instance['InstanceId']
@@ -298,10 +332,12 @@ def configure_instance(ec2: object, volume: dict, options: dict):
     if options['alarm_topics']:
         alarm_sns_topic_arn = options['alarm_topics'][region]
 
-    create_auto_recovery_alarm(region,
-                               options['cluster_name'],
-                               instance_id,
-                               alarm_sns_topic_arn)
+    create_auto_recovery_alarm(
+        region,
+        options['cluster_name'],
+        instance_id,
+        alarm_sns_topic_arn
+    )
 
     # TODO: we should have another transition to wait for Cassandra to
     # jump to Normal, before declaring it complete
@@ -318,14 +354,19 @@ def check_node_status(ec2: object, volume: dict):
 def cleanup_state(ec2: object, volume: dict):
     volume_id = volume['VolumeId']
     logger.info("Operation 'update' completed on {}".format(volume_id))
-    ec2.delete_tags(Resources=[volume_id], Tags=[{'Key': 'planb:operation:state'}])
+    ec2.delete_tags(
+        Resources=[volume_id],
+        Tags=[{'Key': 'planb:operation:state'}]
+    )
 
 
 def step_forward(ec2: object, volume_id: str, options: dict):
     volume = get_volume(ec2, volume_id)
     tags = tags_as_dict(volume.get('Tags', []))
     if tags.get('planb:operation') != 'update':
-        raise Exception("Volume {} not prepared for operation 'update'".format(volume_id))
+        raise Exception(
+            "Volume {} not prepared for operation 'update'".format(volume_id)
+        )
 
     saved_instance = load_dict_from_file(instance_filename(volume))
 
@@ -354,24 +395,32 @@ def step_forward(ec2: object, volume_id: str, options: dict):
         return False
 
     elif state == 'failed':
-        logger.error("Operation 'update' failed on {}: {}" \
-                     .format(volume_id, tags.get('planb:update:fail-reason')))
+        logger.error(
+            "Operation 'update' failed on {}: {}"
+            .format(volume_id, tags.get('planb:update:fail-reason'))
+        )
         return False
 
     else:
-        raise Exception("Unexpected planb:operation:state tag value of {}: {}" \
-                        .format(volume_id, state))
+        raise Exception(
+            "Unexpected planb:operation:state tag value of {}: {}"
+            .format(volume_id, state)
+        )
     return True
 
 
 def ssh_command_works(odd_host: str) -> bool:
-    ssh = subprocess.Popen(['ssh', odd_host, 'echo', 'test-ssh'],
-                           stdout=subprocess.PIPE)
+    ssh = subprocess.Popen(
+        ['ssh', odd_host, 'echo', 'test-ssh'],
+        stdout=subprocess.PIPE
+    )
     try:
         out, err = ssh.communicate(timeout=5)
         return out == b'test-ssh\n'
     except Exception as e:
-        logger.error("Failed to open SSH connection to the Odd host: {}".format(e))
+        logger.error(
+            "Failed to open SSH connection to the Odd host: {}".format(e)
+        )
         ssh.kill()
         ssh.communicate()
 
@@ -379,13 +428,16 @@ def ssh_command_works(odd_host: str) -> bool:
 def open_ssh_tunnel(odd_host: str, instance: dict) -> object:
 
     if is_local_jolokia_port_open():
-        click.echo("Port {} is already in use on localhost!" \
-                   .format(local_jolokia_port), err=True)
+        click.echo(
+            "Port {} is already in use on localhost!".format(local_jolokia_port),
+            err=True
+        )
         return None
 
     ip_address = instance['PrivateIpAddress']
-    port_forward = "{}:{}:{}".format(local_jolokia_port, ip_address,
-                                     remote_jolokia_port)
+    port_forward = "{}:{}:{}".format(
+        local_jolokia_port, ip_address, remote_jolokia_port
+    )
     cmd = ["ssh", odd_host, "-L", port_forward, "-N"]
     logger.info("Opening SSH tunnel: {}".format(" ".join(cmd)))
     ssh = subprocess.Popen(cmd)
@@ -403,24 +455,31 @@ def is_local_jolokia_port_open() -> bool:
     """
     Returns True if local_jolokia_port is accepting connections.
     """
-    return subprocess.call(['nc', 'localhost', str(local_jolokia_port), '-z']) == 0
+    rcode = subprocess.call(['nc', 'localhost', str(local_jolokia_port), '-z'])
+    return rcode == 0
 
 
 def list_instances_to_update(ec2: object, cluster_name: str) -> list:
     dumps = list_instance_dump_files()
     if dumps:
         if len(dumps) > 1:
-            click.echo("Found more than one instance data dump file: {}" \
-                       .format(dumps), err=True)
+            click.echo(
+                "Found more than one instance data dump file: {}".format(dumps),
+                err=True
+            )
             return None
         saved_instance = load_dict_from_file(dumps[0])
-        if click.confirm("Resume interrupted operation on node {}" \
-                         .format(saved_instance['PrivateIpAddress'])):
+        msg = "Resume interrupted operation on node {}" \
+              .format(saved_instance['PrivateIpAddress'])
+        if click.confirm(msg):
             return [saved_instance]
     else:
         print("Listing cluster nodes for {}".format(cluster_name))
-        alive_instances = [i for i in list_instances(ec2, cluster_name)
-                           if 'PrivateIpAddress' in i]
+        alive_instances = [
+            i
+            for i in list_instances(ec2, cluster_name)
+            if 'PrivateIpAddress' in i
+        ]
         return sorted(alive_instances, key=lambda i: i['PrivateIpAddress'])
 
 
@@ -431,10 +490,13 @@ def update_cluster(options: dict):
         return
 
     if options['sns_topic'] or options['sns_email']:
-        regions = [options['region']]  # a list of the only region we act on now
-        alarm_topics = setup_sns_topics_for_alarm(regions,
-                                                  options['sns_topic'],
-                                                  options['sns_email'])
+        # a list of the only region we act on now
+        regions = [options['region']]
+        alarm_topics = setup_sns_topics_for_alarm(
+            regions,
+            options['sns_topic'],
+            options['sns_email']
+        )
     else:
         alarm_topics = {}
     options = dict(options, alarm_topics=alarm_topics)
@@ -449,14 +511,19 @@ def update_cluster(options: dict):
                 continue
 
         if not ssh_command_works(options['odd_host']):
-            click.echo("Cannot ssh to the Odd host!" \
-                       .format(local_jolokia_port), err=True)
+            click.echo(
+                "Cannot ssh to the Odd host!".format(local_jolokia_port),
+                err=True
+            )
             return
 
         ssh = open_ssh_tunnel(options['odd_host'], i)
         if not ssh:
-            click.echo("Cannot forward local port {} via ssh!" \
-                       .format(local_jolokia_port), err=True)
+            click.echo(
+                "Cannot forward local port {} via ssh!"
+                .format(local_jolokia_port),
+                err=True
+            )
             return
 
         try:
