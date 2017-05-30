@@ -134,8 +134,10 @@ def get_instance_profile(cluster_name: str) -> dict:
         profile_name = make_instance_profile_name(cluster_name)
         profile = iam.get_instance_profile(InstanceProfileName=profile_name)
         return profile['InstanceProfile']
-    except botocore.errorfactory.NoSuchEntityException:
-        return None
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'NoSuchEntity':
+            return None
+        raise e
 
 
 def create_instance_profile(cluster_name: str):
