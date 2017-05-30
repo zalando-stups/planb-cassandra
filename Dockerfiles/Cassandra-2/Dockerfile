@@ -26,6 +26,8 @@ RUN echo "f00fbaaf8c136d23f5f5ed9bacbc012a /opt/jolokia/jolokia-jvm-agent.jar" >
 RUN md5sum --check /tmp/jolokia-jvm-agent.jar.md5
 RUN rm -f /tmp/jolokia-jvm-agent.jar.md5
 
+COPY TimeWindowCompactionStrategy-2.1.12.jar /usr/share/cassandra/lib/
+
 COPY cassandra_template.yaml /etc/cassandra/
 COPY cassandra-env.sh /etc/cassandra/
 COPY cassandra-env.sh-original /etc/cassandra/
