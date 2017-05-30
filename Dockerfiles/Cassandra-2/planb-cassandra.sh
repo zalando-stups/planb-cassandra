@@ -101,9 +101,10 @@ echo "Starting Cassandra ..."
 sleep 60
 cqlsh -u cassandra -p cassandra \
       -e "\
-CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER; \
-DROP USER cassandra; \
-ALTER KEYSPACE system_auth WITH replication = { 'class': 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g") };"
+ALTER KEYSPACE system_auth WITH replication = { 'class': 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g") };\
+CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER;" \
+    && \
+    cqlsh -u admin -p "$ADMIN_PASSWORD" -e "DROP USER cassandra;"
 
 # Make sure the script don't exit at this point, if cassandra is still there.
 wait
