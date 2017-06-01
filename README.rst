@@ -288,6 +288,9 @@ following these steps:
 #. Use the 'Launch More Like This' menu in the AWS web console on one
    of the running nodes.
 
+#. If present remove the volumes section from user data. It references
+   the data volume of the original instance.
+
 #. Choose appropriate subnet for the new node: ``internal-...``
    vs. ``dmz-...`` for public IPs setup.  Also try to pick an
    under-represented Availability Zone here, the subnet name suffix
@@ -297,7 +300,7 @@ following these steps:
    Public IP' is set to 'Disable'.
 
 #. At the 'Add Storage' step add a data volume for the new node.  It
-   should use ``/dev/sdf`` as the device name.  EBS encryption is not
+   should use ``/dev/xvdf`` as the device name.  EBS encryption is not
    recommended as it might prevent auto-recovery.
 
 #. Launch the instance.
