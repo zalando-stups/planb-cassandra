@@ -311,7 +311,28 @@ def create_instance(ec2: object, volume: dict, saved_instance: dict,
     logger.info(
         "Creating new instance with IP {}".format(params['PrivateIpAddress'])
     )
-    ec2.run_instances(**params)
+    response = ec2.run_instances(**params)
+    instance_id = response['Instances'][0]['InstanceId']
+    create_tags(ec2, volume['VolumeId'], {'planb:operation:new-instance-id': instance_id})
+
+    if 'PublicIpAddress' in saved_instance:
+        set_state(ec2, volume, 'public-ip-needed')
+    else:
+        set_state(ec2, volume, 'created')
+
+
+def assign_public_ip(ec2: object, volume: dict, saved_instance: dict):
+    instance_id = tags_as_dict(volume.get('Tags', [])).get('planb:operation:new-instance-id')
+
+    instance = get_instance(ec2, instance_id)
+    if instance['State']['Name'] != 'running':
+        return
+
+    logger.info(
+        "Associating new instance with Public IP {}".format(saved_instance['PublicIpAddress'])
+    )
+    ec2.associate_address(InstanceId=instance_id, PublicIp=saved_instance['PublicIpAddress'])
+
     set_state(ec2, volume, 'created')
 
 
@@ -384,6 +405,9 @@ def step_forward(ec2: object, volume_id: str, options: dict):
 
     elif state == 'terminated':
         create_instance(ec2, volume, saved_instance, options)
+
+    elif state == 'public-ip-needed':
+        assign_public_ip(ec2, volume, saved_instance)
 
     elif state == 'created':
         configure_instance(ec2, volume, saved_instance, options)
