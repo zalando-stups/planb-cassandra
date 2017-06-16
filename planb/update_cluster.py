@@ -326,10 +326,7 @@ def configure_instance(ec2: object, volume: dict, saved_instance: dict,
         return
 
     instance_id = instance['InstanceId']
-    create_tags(ec2, instance_id, {
-        t['Key']:t['Value'] 
-        for t in saved_instance['Tags']
-    })
+    ec2.create_tags(Resources=[instance_id], Tags=saved_instance['Tags'])
 
     region = options['region']
     alarm_sns_topic_arn = None
