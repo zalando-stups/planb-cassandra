@@ -21,7 +21,7 @@ from clickclick import Action, info
 
 from .common import override_ephemeral_block_devices, \
     dump_user_data_for_taupage, setup_sns_topics_for_alarm, \
-    create_auto_recovery_alarm, create_instance_profile
+    create_auto_recovery_alarm, ensure_instance_profile
 
 
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
@@ -658,7 +658,7 @@ def create_cluster(options: dict):
         )
         user_data = generate_taupage_user_data(options)
 
-        instance_profile = create_instance_profile(options['cluster_name'])
+        instance_profile = ensure_instance_profile(options['cluster_name'])
 
         options = dict(
             options,

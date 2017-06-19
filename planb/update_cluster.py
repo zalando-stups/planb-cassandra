@@ -18,7 +18,7 @@ from .common import ec2_client, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    create_instance_profile, get_instance_profile
+    ensure_instance_profile
 
 
 """
@@ -262,9 +262,7 @@ def build_run_instances_params(
     if 'IamInstanceProfile' in saved_instance:
         profile = saved_instance['IamInstanceProfile']
     else:
-        profile = get_instance_profile(options['cluster_name'])
-        if profile is None:
-            profile = create_instance_profile(options['cluster_name'])
+        profile = ensure_instance_profile(options['cluster_name'])
 
     instance_profile = {'Arn': profile['Arn']}
     params = dict(
