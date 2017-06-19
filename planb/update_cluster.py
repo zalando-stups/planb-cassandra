@@ -315,7 +315,8 @@ def create_instance(ec2: object, volume: dict, saved_instance: dict,
     set_state(ec2, volume, 'created')
 
 
-def configure_instance(ec2: object, volume: dict, options: dict):
+def configure_instance(ec2: object, volume: dict, saved_instance: dict,
+                       options: dict):
     instance = find_instance_from_volume(ec2, volume,
                                          log_missing_attachment=False)
     if not instance:
@@ -325,7 +326,7 @@ def configure_instance(ec2: object, volume: dict, options: dict):
         return
 
     instance_id = instance['InstanceId']
-    create_tags(ec2, instance_id, {'Name': options['cluster_name']})
+    ec2.create_tags(Resources=[instance_id], Tags=saved_instance['Tags'])
 
     region = options['region']
     alarm_sns_topic_arn = None
@@ -385,7 +386,7 @@ def step_forward(ec2: object, volume_id: str, options: dict):
         create_instance(ec2, volume, saved_instance, options)
 
     elif state == 'created':
-        configure_instance(ec2, volume, options)
+        configure_instance(ec2, volume, saved_instance, options)
 
     elif state == 'configured':
         check_node_status(ec2, volume)
