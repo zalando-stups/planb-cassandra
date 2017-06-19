@@ -197,3 +197,10 @@ def create_instance_profile(cluster_name: str):
     #
     time.sleep(30)
     return profile['InstanceProfile']
+
+
+def ensure_instance_profile(cluster_name: str):
+    profile = get_instance_profile(cluster_name)
+    if profile is None:
+        profile = create_instance_profile(cluster_name)
+    return profile
