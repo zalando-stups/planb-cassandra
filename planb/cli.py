@@ -89,6 +89,7 @@ sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 @click.option('--force-termination', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
+@click.option('--instance-type', type=str)
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
 def update(cluster_name: str,
@@ -97,6 +98,7 @@ def update(cluster_name: str,
            force_termination: bool,
            docker_image: str,
            taupage_ami_id: str,
+           instance_type: str,
            sns_topic: str,
            sns_email: str):
 

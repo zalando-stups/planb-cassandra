@@ -175,16 +175,17 @@ the last used node.
 
 Available options for update:
 
-=================      ========================================================
---cluster-name         The name of your cluster (required)
---odd-host             The Odd host in the region of your VPC (required)
---region               The region where the update should be applied (required)
---force-termination    Disable termination protection for the duration of update
---docker-image         The full specified name of the Docker image
---taupage-ami-id       The full specified name of the AMI
---sns-topic            Amazon SNS topic name to use for notifications about Auto-Recovery.
---sns-email            Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
-=================      ========================================================
+===================  ========================================================
+--cluster-name       The name of your cluster (required)
+--odd-host           The Odd host in the region of your VPC (required)
+--region             The region where the update should be applied (required)
+--force-termination  Disable termination protection for the duration of update
+--docker-image       The full specified name of the Docker image
+--taupage-ami-id     The full specified name of the AMI
+--instance-type      The type of instance to deploy each node on (e.g. t2.medium)
+--sns-topic          Amazon SNS topic name to use for notifications about Auto-Recovery.
+--sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
+===================  ========================================================
 
 
 Client configuration for Public IPs setup
