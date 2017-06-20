@@ -274,7 +274,7 @@ def build_run_instances_params(
         IamInstanceProfile=instance_profile
     )
 
-    options_to_api = {'taupage_ami_id': 'ImageId'}
+    options_to_api = {'taupage_ami_id': 'ImageId', 'instance_type': 'InstanceType'}
     instance_changes = {
         v: options[k]
         for k, v in options_to_api.items()
