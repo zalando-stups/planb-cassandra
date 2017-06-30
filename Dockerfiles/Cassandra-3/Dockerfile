@@ -3,9 +3,9 @@ FROM registry.opensource.zalan.do/stups/openjdk:latest
 MAINTAINER Zalando SE
 
 # SSL Storage Port, Jolokia Agent, JMX,  CQL Native
-EXPOSE 7001 7199 8778 9042 
+EXPOSE 7001 7199 8778 9042
 
-ENV CASSIE_VERSION=3.10
+ENV CASSIE_VERSION=3.11
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN echo "deb http://www.apache.org/dist/cassandra/debian 310x main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
