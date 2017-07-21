@@ -34,7 +34,9 @@ COPY jvm.options /etc/cassandra/
 # Override logging: STDOUT only
 COPY logback.xml /etc/cassandra/
 
-RUN rm -f /etc/cassandra/cassandra.yaml && chmod 0777 /etc/cassandra
+RUN rm -f /etc/cassandra/cassandra.yaml \
+          /etc/cassandra/cassandra-rackdc.properties && \
+    chmod 0777 /etc/cassandra
 
 COPY planb-cassandra.sh /usr/local/bin/
 
