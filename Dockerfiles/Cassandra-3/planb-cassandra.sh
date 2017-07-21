@@ -1,8 +1,10 @@
 #!/bin/sh
 # CLUSTER_NAME
+# AUTO_BOOTSTRAP
 # LISTEN_ADDRESS
 # BROADCAST_ADDRESS
 # SNITCH
+# DC_SUFFIX
 # CASSANDRA_DATA_DIR
 # TRUSTSTORE
 # KEYSTORE
@@ -17,6 +19,12 @@ if [ -z "$CLUSTER_NAME" ] ;
 then
     echo "Cluster name is not defined."
     exit 1
+fi
+
+if [ -z "$AUTO_BOOTSTRAP" ];
+then
+    echo "Automatic bootstrap is not set, defaulting to 'true'."
+    export AUTO_BOOTSTRAP=true
 fi
 
 EC2_META_URL=http://169.254.169.254/latest/meta-data
@@ -99,6 +107,11 @@ fi
 
 echo "Generating configuration from template ..."
 python -c "import sys, os; sys.stdout.write(os.path.expandvars(open('/etc/cassandra/cassandra_template.yaml').read()))" > /etc/cassandra/cassandra.yaml
+
+if [ -n "$DC_SUFFIX" ]; then
+    echo "Setting dc_suffix in cassandra-rackdc.properties ..."
+    echo "dc_suffix=$DC_SUFFIX" > /etc/cassandra/cassandra-rackdc.properties
+fi
 
 echo "Starting Cassandra ..."
 /usr/sbin/cassandra -R -f &
