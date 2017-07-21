@@ -5,6 +5,8 @@
 #   full explanations of configuration directives
 # /NOTE
 
+auto_bootstrap: $AUTO_BOOTSTRAP
+
 # The name of the cluster. This is mainly used to prevent machines in
 # one logical cluster from joining another.
 cluster_name: '$CLUSTER_NAME'
