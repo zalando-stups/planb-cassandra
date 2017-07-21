@@ -102,14 +102,16 @@ echo "Starting Cassandra ..."
 /usr/sbin/cassandra -f &
 
 #
-# Try to override default superuser password (we don't care if it
+# Try to create admin user and drop the default superuser (we don't care if it
 # fails, that would just mean we are not the first one to do that).
 #
 sleep 60
 cqlsh -u cassandra -p cassandra \
       -e "\
-ALTER USER cassandra WITH PASSWORD '$ADMIN_PASSWORD'; \
-ALTER KEYSPACE system_auth WITH replication = { 'class': 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g") };"
+ALTER KEYSPACE system_auth WITH replication = { 'class': 'NetworkTopologyStrategy' $(echo $REGIONS | sed "s/\([^ ]*\)-1/, '\1': $CLUSTER_SIZE/g") };\
+CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER;" \
+    && \
+    cqlsh -u admin -p "$ADMIN_PASSWORD" -e "DROP USER cassandra;"
 
 # Make sure the script don't exit at this point, if cassandra is still there.
 wait
