@@ -539,9 +539,9 @@ The Cassandra cluster {cluster_name} was created with {cluster_size} nodes
 in each of the following AWS regions: {regions_list}
 
 You can now login to any of the cluster nodes with the superuser
-account using the following command:
+account using the following command from inside the docker container:
 
-$ cqlsh -u cassandra -p '{admin_password}'
+(docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
 
 From there you can create non-superuser roles and otherwise configure
 the cluster.
