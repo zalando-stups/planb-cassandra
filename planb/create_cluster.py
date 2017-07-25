@@ -550,8 +550,7 @@ You might also need to update the Security Groups named {cluster_name}
 (in all regions!) to allow access to Cassandra from your application (port 9042)
 and optionally to allow access to Jolokia (port 8778) and/or
 Prometheus Node Exporter (port 9100) from your monitoring tool.
-'''.format(**options, regions_list=' '.join(options['regions']),
-           admin_password=options['user_data']['environment']['ADMIN_PASSWORD']))
+'''.format(**options, regions_list=' '.join(options['regions'])))
 
 
 def print_failure_message():
