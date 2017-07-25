@@ -539,9 +539,9 @@ The Cassandra cluster {cluster_name} was created with {cluster_size} nodes
 in each of the following AWS regions: {regions_list}
 
 You can now login to any of the cluster nodes with the superuser
-account using the following command:
+account using the following command from inside the docker container:
 
-$ cqlsh -u cassandra -p '{admin_password}'
+(docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
 
 From there you can create non-superuser roles and otherwise configure
 the cluster.
@@ -550,8 +550,7 @@ You might also need to update the Security Groups named {cluster_name}
 (in all regions!) to allow access to Cassandra from your application (port 9042)
 and optionally to allow access to Jolokia (port 8778) and/or
 Prometheus Node Exporter (port 9100) from your monitoring tool.
-'''.format(**options, regions_list=' '.join(options['regions']),
-           admin_password=options['user_data']['environment']['ADMIN_PASSWORD']))
+'''.format(**options, regions_list=' '.join(options['regions'])))
 
 
 def print_failure_message():
