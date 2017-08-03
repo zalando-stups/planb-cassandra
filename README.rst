@@ -29,8 +29,8 @@ Prerequisites
 * Python dependencies (``sudo pip3 install -r requirements.txt``)
 * Java 8 with ``keytool`` in your ``PATH`` (required to generate SSL certificates)
 * Latest Stups tooling installed and configured
-* You have created a dedicated AWS IAM user for autorecovery with non temporary credentials
-  This policy document for the autorecovery user should look like the following::
+* You have created a dedicated AWS IAM user for auto-recovery.  The policy
+  document for this user should look like the following::
 
     {
         "Version": "2012-10-17",
@@ -50,15 +50,22 @@ Prerequisites
             }
         ]
     }
-* You have a ``planb_autorecovery`` section in your AWS credentials file with the credentials
-  of the autorecovery user::
+* You have a ``planb_autorecovery`` section in your AWS credentials file
+  (``~/.aws/credentials``) with the access key of the auto-recovery user::
 
     [planb_autorecovery]
     aws_access_key_id = THEKEYID
     aws_secret_access_key = THESECRETKEY
 
-  These credentials are used to create the autorecovery alarm. The recovery action is performed
-  by this dedicated autorecovery user.
+  These credentials are only used to create the auto-recovery alarm.  When
+  triggered by the failing system status check, the recovery action is
+  performed by this dedicated user.
+
+  .. note::
+
+     The access keys for the auto-recovery user can be rotated or made
+     inactive at any time, without impacting its ability to perform the
+     recovery action.  The user still needs to be there, however.
 
 
 Usage
