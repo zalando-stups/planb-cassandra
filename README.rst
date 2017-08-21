@@ -127,13 +127,23 @@ trailing dot.)
 It might be required to update the Security Group(s) of the Cassandra
 cluster to allow SSH access (TCP port 22, Jolokia Port 8778) from Odd_
 host.  After that is done, you can use `Più`_ to get SSH access and
-create your application user and the first schema:
+create the admin user, set replication factors for system_auth keyspace,
+then create your application user and the data keyspace:
 
 .. code-block:: bash
 
     $ piu 172.31.1.1 "initial Cassandra setup"  # replace private IP
     $ docker exec -it taupageapp bash
+
+    (docker)$ cqlsh -u cassandra -p cassandra \
+                -e "CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER;" \
+              && \
+              cqlsh -u admin -p $ADMIN_PASSWORD \
+                -e "DROP USER cassandra;"
+
     (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
+    cqlsh> ALTER KEYSPACE system_auth WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-central': 3, 'eu-west': 3};
+
     cqlsh> CREATE USER myuser WITH PASSWORD '...' NOSUPERUSER;
     cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
 
