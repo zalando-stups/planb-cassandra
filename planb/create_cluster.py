@@ -559,7 +559,7 @@ settings of system_auth keyspace as shown below.
 
 (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
 
-(cqlsh)$ ALTER KEYSPACE system_auth WITH replication = {{
+cqlsh> ALTER KEYSPACE system_auth WITH replication = {{
     'class': 'NetworkTopologyStrategy',
     {dc_list}
   }};
