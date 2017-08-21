@@ -371,9 +371,7 @@ def generate_taupage_user_data(options: dict) -> str:
         },
         'environment': {
             'CLUSTER_NAME': options['cluster_name'],
-            'CLUSTER_SIZE': options['cluster_size'],
             'NUM_TOKENS': options['num_tokens'],
-            'REGIONS': ' '.join(options['regions']),
             'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
@@ -534,23 +532,45 @@ def launch_normal_nodes(options: dict):
 
 def print_success_message(options: dict):
     info('Cluster initialization completed successfully!')
+
+    # prepare alter keyspace params in the format: 'eu-central': N [, ...]
+    dc_list = ',\n    '.join([
+        "'{}': {}".format(re.sub('-[0-9]+$', '', r), options['cluster_size'])
+        for r in options['regions']
+    ])
+
     sys.stdout.write('''
 The Cassandra cluster {cluster_name} was created with {cluster_size} nodes
 in each of the following AWS regions: {regions_list}
 
-You can now login to any of the cluster nodes with the superuser
-account using the following command from inside the docker container:
+You should now login to any of the cluster nodes to create the admin superuser,
+using the following command:
+
+$ docker exec -ti taupageapp bash
+
+(docker)$ cqlsh -u cassandra -p cassandra \\
+            -e "CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER;" \\
+          && \\
+          cqlsh -u admin -p $ADMIN_PASSWORD \\
+            -e "DROP USER cassandra;"
+
+Then login with the newly created admin account and change the replication
+settings of system_auth keyspace as shown below.
 
 (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
 
-From there you can create non-superuser roles and otherwise configure
-the cluster.
+(cqlsh)$ ALTER KEYSPACE system_auth WITH replication = {{
+    'class': 'NetworkTopologyStrategy',
+    {dc_list}
+  }};
+
+You can now also create non-superuser application roles and data keyspace(s).
 
 You might also need to update the Security Groups named {cluster_name}
 (in all regions!) to allow access to Cassandra from your application (port 9042)
 and optionally to allow access to Jolokia (port 8778) and/or
 Prometheus Node Exporter (port 9100) from your monitoring tool.
-'''.format(**options, regions_list=' '.join(options['regions'])))
+'''.format(**options, regions_list=' '.join(options['regions']), dc_list=dc_list))
 
 
 def print_failure_message():
