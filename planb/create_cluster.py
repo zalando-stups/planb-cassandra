@@ -426,7 +426,8 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         region
     )
     with Action(msg) as act:
-        ec2 = boto3.client('ec2', region_name=region)
+        session = boto3.session.Session()
+        ec2 = session.client('ec2', region_name=region)
 
         mappings = ami.block_device_mappings
         block_devices = override_ephemeral_block_devices(mappings)
