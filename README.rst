@@ -292,6 +292,9 @@ following these steps:
 #. Make sure that under 'Instance Details' the setting 'Auto-assign
    Public IP' is set to 'Disable'.
 
+#. **Review UserData.**  Make sure that ``AUTO_BOOTSTRAP`` environment
+   variable is set to ``true`` or not present.
+
 #. At the 'Add Storage' step add a data volume for the new node.  It
    should use ``/dev/xvdf`` as the device name.  EBS encryption is not
    recommended as it might prevent auto-recovery.
