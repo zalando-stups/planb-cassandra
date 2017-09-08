@@ -371,9 +371,7 @@ def generate_taupage_user_data(options: dict) -> str:
         },
         'environment': {
             'CLUSTER_NAME': options['cluster_name'],
-            'CLUSTER_SIZE': options['cluster_size'],
             'NUM_TOKENS': options['num_tokens'],
-            'REGIONS': ' '.join(options['regions']),
             'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
@@ -534,23 +532,53 @@ def launch_normal_nodes(options: dict):
 
 def print_success_message(options: dict):
     info('Cluster initialization completed successfully!')
+
+    regions_list = ' '.join(options['regions'])
+
+    # prepare alter keyspace params in the format: 'eu-central': N [, ...]
+    dc_list = ', '.join([
+        "'{}': {}".format(re.sub('-[0-9]+$', '', r), options['cluster_size'])
+        for r in options['regions']
+    ])
+
     sys.stdout.write('''
 The Cassandra cluster {cluster_name} was created with {cluster_size} nodes
 in each of the following AWS regions: {regions_list}
 
-You can now login to any of the cluster nodes with the superuser
-account using the following command from inside the docker container:
+You might need to update the Security Group named {cluster_name}
+(in all regions!) to allow access to Cassandra from the Odd host (port 22),
+from your application (port 9042) and optionally to allow access to Jolokia
+(port 8778) and/or Prometheus Node Exporter (port 9100) from your monitoring
+tool.
+
+You should now login to any of the cluster nodes to change the replication
+settings of system_auth keyspace and to create the admin superuser, using the
+following commands:
+
+$ docker exec -ti taupageapp bash
+
+(docker)$ cqlsh -u cassandra -p cassandra \\
+  -e "ALTER KEYSPACE system_auth WITH replication = {{
+        'class': 'NetworkTopologyStrategy', {dc_list}
+      }};
+      CREATE USER admin WITH PASSWORD '$ADMIN_PASSWORD' SUPERUSER;"
+
+Then login with the newly created admin account and disable the default
+superuser account:
 
 (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
 
-From there you can create non-superuser roles and otherwise configure
-the cluster.
+cqlsh> ALTER USER cassandra WITH PASSWORD '{random_pw}' NOSUPERUSER;
 
-You might also need to update the Security Groups named {cluster_name}
-(in all regions!) to allow access to Cassandra from your application (port 9042)
-and optionally to allow access to Jolokia (port 8778) and/or
-Prometheus Node Exporter (port 9100) from your monitoring tool.
-'''.format(**options, regions_list=' '.join(options['regions'])))
+You can then also create non-superuser application roles and data keyspace(s).
+
+In general, follow the documentation on setting up authentication, depending
+on your Cassandra version:
+
+  http://docs.datastax.com/en/cassandra/3.0/cassandra/configuration/secureConfigNativeAuth.html
+  http://docs.datastax.com/en/cassandra/2.1/cassandra/security/security_config_native_authenticate_t.html
+'''.format(**options, regions_list=regions_list, dc_list=dc_list,
+           random_pw=generate_password()))
 
 
 def print_failure_message():

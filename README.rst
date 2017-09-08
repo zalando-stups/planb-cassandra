@@ -131,18 +131,10 @@ If you use the Hosted Zone parameter, a full name specification is
 required e.g.: ``--hosted-zone myzone.example.com.`` (note the
 trailing dot.)
 
-It might be required to update the Security Group(s) of the Cassandra
-cluster to allow SSH access (TCP port 22, Jolokia Port 8778) from Odd_
-host.  After that is done, you can use `Più`_ to get SSH access and
-create your application user and the first schema:
-
-.. code-block:: bash
-
-    $ piu 172.31.1.1 "initial Cassandra setup"  # replace private IP
-    $ docker exec -it taupageapp bash
-    (docker)$ cqlsh -u admin -p $ADMIN_PASSWORD
-    cqlsh> CREATE USER myuser WITH PASSWORD '...' NOSUPERUSER;
-    cqlsh> CREATE SCHEMA myschema WITH replication = {'class': 'NetworkTopologyStrategy', 'eu-west': 3, 'eu-central': 3};
+After the create command finishes successfully, follow the on-screen
+instructions to create the admin superuser, set replication factors for
+system_auth keyspace and then create your application user and the data
+keyspace.
 
 The generated administrator password is available inside the docker
 container in an environment variable ``ADMIN_PASSWORD``.

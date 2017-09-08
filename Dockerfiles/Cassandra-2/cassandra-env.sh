@@ -212,10 +212,10 @@ JVM_OPTS="$JVM_OPTS -Xss256k"
 JVM_OPTS="$JVM_OPTS -XX:StringTableSize=1000003"
 
 # GC tuning options
-JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC" 
-JVM_OPTS="$JVM_OPTS -XX:+UseConcMarkSweepGC" 
-JVM_OPTS="$JVM_OPTS -XX:+CMSParallelRemarkEnabled" 
-JVM_OPTS="$JVM_OPTS -XX:SurvivorRatio=8" 
+JVM_OPTS="$JVM_OPTS -XX:+UseParNewGC"
+JVM_OPTS="$JVM_OPTS -XX:+UseConcMarkSweepGC"
+JVM_OPTS="$JVM_OPTS -XX:+CMSParallelRemarkEnabled"
+JVM_OPTS="$JVM_OPTS -XX:SurvivorRatio=8"
 JVM_OPTS="$JVM_OPTS -XX:MaxTenuringThreshold=1"
 JVM_OPTS="$JVM_OPTS -XX:CMSInitiatingOccupancyFraction=75"
 JVM_OPTS="$JVM_OPTS -XX:+UseCMSInitiatingOccupancyOnly"
@@ -233,13 +233,15 @@ if [ "$JVM_ARCH" = "64-Bit" ] ; then
 fi
 
 # GC logging options -- uncomment to enable
-# JVM_OPTS="$JVM_OPTS -XX:+PrintGCDetails"
-# JVM_OPTS="$JVM_OPTS -XX:+PrintGCDateStamps"
-# JVM_OPTS="$JVM_OPTS -XX:+PrintHeapAtGC"
-# JVM_OPTS="$JVM_OPTS -XX:+PrintTenuringDistribution"
-# JVM_OPTS="$JVM_OPTS -XX:+PrintGCApplicationStoppedTime"
-# JVM_OPTS="$JVM_OPTS -XX:+PrintPromotionFailure"
+JVM_OPTS="$JVM_OPTS -XX:+PrintGCDetails"
+JVM_OPTS="$JVM_OPTS -XX:+PrintGCDateStamps"
+JVM_OPTS="$JVM_OPTS -XX:+PrintHeapAtGC"
+JVM_OPTS="$JVM_OPTS -XX:+PrintTenuringDistribution"
+JVM_OPTS="$JVM_OPTS -XX:+PrintGCApplicationStoppedTime"
+JVM_OPTS="$JVM_OPTS -XX:+PrintPromotionFailure"
 # JVM_OPTS="$JVM_OPTS -XX:PrintFLSStatistics=1"
+
+# Don't specify the file, we want the GC logs on stdout.
 # JVM_OPTS="$JVM_OPTS -Xloggc:/var/log/cassandra/gc-`date +%s`.log"
 # If you are using JDK 6u34 7u2 or later you can enable GC log rotation
 # don't stick the date in the log name if rotation is on.
@@ -248,8 +250,8 @@ fi
 # JVM_OPTS="$JVM_OPTS -XX:NumberOfGCLogFiles=10"
 # JVM_OPTS="$JVM_OPTS -XX:GCLogFileSize=10M"
 
-# Configure the following for JEMallocAllocator and if jemalloc is not available in the system 
-# library path (Example: /usr/local/lib/). Usually "make install" will do the right thing. 
+# Configure the following for JEMallocAllocator and if jemalloc is not available in the system
+# library path (Example: /usr/local/lib/). Usually "make install" will do the right thing.
 # export LD_LIBRARY_PATH=<JEMALLOC_HOME>/lib/
 # JVM_OPTS="$JVM_OPTS -Djava.library.path=<JEMALLOC_HOME>/lib/"
 
@@ -274,9 +276,9 @@ JVM_OPTS="$JVM_OPTS -Djava.net.preferIPv4Stack=true"
 # for more on configuring JMX through firewalls, etc. (Short version:
 # get it working with no firewall first.)
 #
-# Cassandra ships with JMX accessible *only* from localhost.  
+# Cassandra ships with JMX accessible *only* from localhost.
 # To enable remote JMX connections, uncomment lines below
-# with authentication and/or ssl enabled. See https://wiki.apache.org/cassandra/JmxSecurity 
+# with authentication and/or ssl enabled. See https://wiki.apache.org/cassandra/JmxSecurity
 #
 LOCAL_JMX=not-only
 
