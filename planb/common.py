@@ -8,8 +8,41 @@ import os
 from datetime import datetime
 
 
-def ec2_client(region: str) -> object:
-    return boto3.client('ec2', region)
+class SessionRefreshingBotoClient(object):
+
+    def __init__(self, service_name: str, region_name: str):
+        self._service_name = service_name
+        self._region_name = region_name
+        self._refresh_session()
+
+    def _refresh_session(self):
+        # creating the session explicitly avoids use of stale credentials
+        session = boto3.session.Session()
+        self._client = session.client(self._service_name, self._region_name)
+
+    def _wrap_callable(self, name: str):
+        def wrapper(*args, **kwargs):
+            retried = False
+            while True:
+                try:
+                    attr = getattr(self._client, name)
+                    return attr(*args, **kwargs)
+                except botocore.exceptions.ClientError as e:
+                    if e.response['Error']['Code'] == 'RequestExpired':
+                        if not retried:
+                            retried = True
+                            self._refresh_session()
+                            continue
+                    raise
+        return wrapper
+
+    def __getattr__(self, name: str):
+        attr = getattr(self._client, name)
+        return self._wrap_callable(name) if callable(attr) else attr
+
+
+def boto_client(service_name: str, region_name: str = None) -> object:
+    return SessionRefreshingBotoClient(service_name, region_name)
 
 
 def json_serial(obj):

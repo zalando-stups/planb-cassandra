@@ -13,7 +13,7 @@ import io
 import os
 
 # TODO: can we avoid the explicit list here?
-from .common import ec2_client, \
+from .common import boto_client, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, \
@@ -507,7 +507,7 @@ def list_instances_to_update(ec2: object, cluster_name: str) -> list:
 
 
 def update_cluster(options: dict):
-    ec2 = ec2_client(options['region'])
+    ec2 = boto_client('ec2', options['region'])
     instances = list_instances_to_update(ec2, options['cluster_name'])
     if not instances:
         return
