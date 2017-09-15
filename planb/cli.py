@@ -2,7 +2,7 @@ import re
 import click
 import logging
 
-from .common import ec2_client, list_instances
+from .common import boto_client, list_instances
 from .show_cluster import show_instances
 from .create_cluster import create_cluster
 from .update_cluster import update_cluster
@@ -115,6 +115,6 @@ def update(cluster_name: str,
 def nodes(region: str, cluster_name: str):
     # TODO: we should extend it to list of regions
     # TODO: we could derive the regions a cluster is deployed to from SRV DNS record
-    ec2 = ec2_client(region)
+    ec2 = boto_client('ec2', region)
     instances = list_instances(ec2, cluster_name)
     show_instances(instances)

@@ -19,7 +19,7 @@ import click
 from botocore.exceptions import ClientError
 from clickclick import Action, info
 
-from .common import override_ephemeral_block_devices, \
+from .common import boto_client, override_ephemeral_block_devices, \
     dump_user_data_for_taupage, setup_sns_topics_for_alarm, \
     create_auto_recovery_alarm, ensure_instance_profile
 
@@ -32,7 +32,7 @@ def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
     description = 'Allow Cassandra nodes to talk to each other on port 7001'
     for region, ips in node_ips.items():
         with Action('Configuring Security Group in {}..'.format(region)):
-            ec2 = boto3.client('ec2', region)
+            ec2 = boto_client('ec2', region)
             resp = ec2.describe_vpcs()
             # TODO: support more than one VPC..
             vpc = resp['Vpcs'][0]
@@ -244,7 +244,7 @@ def allocate_ip_addresses(
     '''
     for region, subnets in region_subnets.items():
         with Action('Allocating IP addresses in {}..'.format(region)) as act:
-            ec2 = boto3.client('ec2', region_name=region)
+            ec2 = boto_client('ec2', region)
 
             for ip in generate_private_ip_addresses(ec2, subnets, cluster_size):
                 address = {'PrivateIp': ip}
@@ -282,7 +282,7 @@ def get_subnets(prefix_filter: str, regions: list) -> dict:
     '''
     subnets = collections.defaultdict(list)
     for region in regions:
-        ec2 = boto3.client('ec2', region)
+        ec2 = boto_client('ec2', region)
         resp = ec2.describe_subnets()
         sorted_subnets = sorted(
             resp['Subnets'],
@@ -306,7 +306,7 @@ def make_dns_records(region: str, ips: list) -> list:
 
 
 def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
-    r53 = boto3.client('route53')
+    r53 = boto_client('route53')
 
     zone = None
     zones = r53.list_hosted_zones_by_name(DNSName=hosted_zone)
@@ -426,8 +426,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         region
     )
     with Action(msg) as act:
-        session = boto3.session.Session()
-        ec2 = session.client('ec2', region_name=region)
+        ec2 = boto_client('ec2', region)
 
         mappings = ami.block_device_mappings
         block_devices = override_ephemeral_block_devices(mappings)
@@ -714,13 +713,13 @@ def create_cluster(options: dict):
         # Undo stack sounds like a natural choice.
         #
         for region, sg in security_groups.items():
-            ec2 = boto3.client('ec2', region)
+            ec2 = boto_client('ec2', region)
             info('Cleaning up security group: {}'.format(sg['GroupId']))
             ec2.delete_security_group(GroupId=sg['GroupId'])
 
         if options['use_dmz']:
             for region, ips in node_ips.items():
-                ec2 = boto3.client('ec2', region)
+                ec2 = boto_client('ec2', region)
                 for ip in ips:
                     info('Releasing IP address: {}'.format(ip['PublicIp']))
                     ec2.release_address(AllocationId=ip['AllocationId'])

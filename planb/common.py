@@ -8,8 +8,43 @@ import os
 from datetime import datetime
 
 
-def ec2_client(region: str) -> object:
-    return boto3.client('ec2', region)
+class SessionRefreshingBotoClient(object):
+
+    def __init__(self, profile_name: str, service_name: str, region_name: str):
+        self._profile_name = profile_name
+        self._service_name = service_name
+        self._region_name = region_name
+        self._refresh_session()
+
+    def _refresh_session(self):
+        # creating the session explicitly avoids use of stale credentials
+        session = boto3.session.Session(profile_name=self._profile_name)
+        self._client = session.client(self._service_name, self._region_name)
+
+    def _wrap_callable(self, name: str):
+        def wrapper(*args, **kwargs):
+            retried = False
+            while True:
+                try:
+                    attr = getattr(self._client, name)
+                    return attr(*args, **kwargs)
+                except botocore.exceptions.ClientError as e:
+                    if e.response['Error']['Code'] == 'RequestExpired':
+                        if not retried:
+                            retried = True
+                            self._refresh_session()
+                            continue
+                    raise
+        return wrapper
+
+    def __getattr__(self, name: str):
+        attr = getattr(self._client, name)
+        return self._wrap_callable(name) if callable(attr) else attr
+
+
+def boto_client(service_name: str, region_name: str = None,
+                profile_name: str = None) -> object:
+    return SessionRefreshingBotoClient(profile_name, service_name, region_name)
 
 
 def json_serial(obj):
@@ -87,7 +122,7 @@ def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> li
 
     result = {}
     for region in regions:
-        sns = boto3.client('sns', region_name=region)
+        sns = boto_client('sns', region)
         resp = sns.create_topic(Name=topic_name)
         topic_arn = resp['TopicArn']
         if email:
@@ -98,9 +133,7 @@ def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> li
 
 def create_auto_recovery_alarm(region: str, cluster_name: str,
                                instance_id: str, alarm_sns_topic_arn: str):
-    session = boto3.Session(profile_name='planb_autorecovery')
-    cw = session.client('cloudwatch', region_name=region)
-
+    cw = boto_client('cloudwatch', region, profile_name='planb_autorecovery')
     alarm_name = '{}-{}-auto-recover'.format(cluster_name, instance_id)
 
     alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
@@ -129,7 +162,7 @@ def make_instance_profile_name(cluster_name: str) -> str:
 
 
 def get_instance_profile(cluster_name: str) -> dict:
-    iam = boto3.client('iam')
+    iam = boto_client('iam')
     try:
         profile_name = make_instance_profile_name(cluster_name)
         profile = iam.get_instance_profile(InstanceProfileName=profile_name)
@@ -145,7 +178,7 @@ def create_instance_profile(cluster_name: str):
     role_name = 'role-{}'.format(cluster_name)
     policy_name = 'policy-{}-datavolume'.format(cluster_name)
 
-    iam = boto3.client('iam')
+    iam = boto_client('iam')
 
     profile = iam.create_instance_profile(InstanceProfileName=profile_name)
 
