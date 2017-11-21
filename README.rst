@@ -285,26 +285,29 @@ following these steps:
    need 2 new IP addresses in every region and both security groups
    need to be updated to include a total of 4 new addresses.
 
+#. Choose a private IP for the new instance, that is not already taken by any
+   other EC2 instance in the VPC.  You will need it on further steps.
+
+#. Create a new EBS volume of appropriate type and size (normally you want to
+   have the same settings as for the rest of the cluster).  EBS encryption is
+   not recommended as it might prevent auto-recovery.
+
+#. Create a ``Name`` tag on the volume in the format:
+   ``<cluster-name>-<private-ip>``.
+
 #. Use the 'Launch More Like This' menu in the AWS web console on one
    of the running nodes.
 
-#. If present remove the volumes section from user data. It references
-   the data volume of the original instance.
-
 #. Choose appropriate subnet for the new node: ``internal-...``
-   vs. ``dmz-...`` for public IPs setup.  Also try to pick an
-   under-represented Availability Zone here, the subnet name suffix
-   gives a hint: ``1a``, ``1b``, etc.
+   vs. ``dmz-...`` for public IPs setup.  The subnet need to match your
+   private IP, which should also be assigned manually on the same page.
 
 #. Make sure that under 'Instance Details' the setting 'Auto-assign
    Public IP' is set to 'Disable'.
 
-#. **Review UserData.**  Make sure that ``AUTO_BOOTSTRAP`` environment
-   variable is set to ``true`` or not present.
-
-#. At the 'Add Storage' step add a data volume for the new node.  It
-   should use ``/dev/xvdf`` as the device name.  EBS encryption is not
-   recommended as it might prevent auto-recovery.
+#. **Review UserData.** Make sure that ``AUTO_BOOTSTRAP`` environment variable
+   is set to ``true`` or not present.  Update the referenced EBS volume to:
+   ``<cluster-name>-<private-ip>``
 
 #. Launch the instance.
 
@@ -319,9 +322,6 @@ following these steps:
 
 #. Monitor the logs of the new instance and ``nodetool status`` to
    track its progress in joining the ring.
-
-#. Locate the new instance's data volume and add the ``Name`` tag for
-   it (look at existing nodes and their data volumes).
 
 #. Use the 'CloudWatch Monitoring' > 'Add/Edit Alarms' to add an
    auto-recovery alarm for the new instance.
