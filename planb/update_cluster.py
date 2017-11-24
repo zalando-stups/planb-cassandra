@@ -247,7 +247,7 @@ def terminate_instance(ec2: object, volume: dict, saved_instance: dict):
 
 
 def build_run_instances_params(
-        ec2: object, volume: dict, saved_instance: dict, options: dict) -> dict:
+        ec2: object, saved_instance: dict, options: dict) -> dict:
 
     inherited_keys = [
         'ImageId',
@@ -294,16 +294,22 @@ def build_run_instances_params(
             }
         }
     }
+
     docker_image = options.get('docker_image')
     if docker_image:
         user_data_changes['source'] = docker_image
+
+    scalyr_key = options.get('scalyr_key')
+    if scalyr_key:
+        user_data_changes['scalyr_account_key'] = scalyr_key
+
     params['UserData'].update(user_data_changes)
     return params
 
 
 def create_instance(ec2: object, volume: dict, saved_instance: dict,
                     options: dict):
-    params = build_run_instances_params(ec2, volume, saved_instance, options)
+    params = build_run_instances_params(ec2, saved_instance, options)
     params['UserData'] = dump_user_data_for_taupage(params['UserData'])
 
     logger.info(
