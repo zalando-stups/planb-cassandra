@@ -90,6 +90,7 @@ sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
 @click.option('--instance-type', type=str)
+@click.option('--scalyr-key')
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
 def update(cluster_name: str,
@@ -99,6 +100,7 @@ def update(cluster_name: str,
            docker_image: str,
            taupage_ami_id: str,
            instance_type: str,
+           scalyr_key: str,
            sns_topic: str,
            sns_email: str):
 
