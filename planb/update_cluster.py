@@ -247,7 +247,7 @@ def terminate_instance(ec2: object, volume: dict, saved_instance: dict):
 
 
 def build_run_instances_params(
-        ec2: object, volume: dict, saved_instance: dict, options: dict) -> dict:
+        ec2: object, saved_instance: dict, options: dict) -> dict:
 
     inherited_keys = [
         'ImageId',
@@ -309,7 +309,7 @@ def build_run_instances_params(
 
 def create_instance(ec2: object, volume: dict, saved_instance: dict,
                     options: dict):
-    params = build_run_instances_params(ec2, volume, saved_instance, options)
+    params = build_run_instances_params(ec2, saved_instance, options)
     params['UserData'] = dump_user_data_for_taupage(params['UserData'])
 
     logger.info(
