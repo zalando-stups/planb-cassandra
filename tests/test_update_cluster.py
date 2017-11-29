@@ -52,6 +52,7 @@ def test_build_run_instances_params():
         'docker_image': 'docker.registry/cassandra:123',
         'taupage_ami_id': 'ami-654321',
         'instance_type': 'm4.xlarge',
+        'scalyr_region': 'eu',
         'scalyr_key': 'new-shiny-scalyr-key'
     }
     expected = {
@@ -76,6 +77,7 @@ def test_build_run_instances_params():
                     'partition': '/dev/xvdf'
                 }
             },
+            'scalyr_region': 'eu',
             'scalyr_account_key': 'new-shiny-scalyr-key'
         }
     }

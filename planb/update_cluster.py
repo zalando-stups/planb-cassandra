@@ -299,6 +299,10 @@ def build_run_instances_params(
     if docker_image:
         user_data_changes['source'] = docker_image
 
+    scalyr_region = options.get('scalyr_region')
+    if scalyr_region:
+        user_data_changes['scalyr_region'] = scalyr_region
+
     scalyr_key = options.get('scalyr_key')
     if scalyr_key:
         user_data_changes['scalyr_account_key'] = scalyr_key
