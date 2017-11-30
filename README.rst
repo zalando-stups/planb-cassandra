@@ -110,7 +110,8 @@ Available options are:
 --no-termination-protection  Don't protect EC2 instances from accidental termination.  Useful for testing and development.
 --use-dmz                    Deploy the cluster into DMZ subnets using Public IPs (required for multi-region setup).
 --hosted-zone                Specify this to create SRV records for every region, listing all nodes' private IP addresses in that region.  This is optional.
---scalyr-key                 Write Logs API Key for Scalyr (optional).
+--scalyr-key                 API Key for writing logs to Scalyr (optional).
+--scalyr-region              Scalyr account region, such as 'eu' (optional).
 --artifact-name              Override Pierone artifact name.  Default: planb-cassandra-3.0
 --docker-image               Override default Docker image.
 --environment, -e            Extend/override environment section of Taupage user data.
@@ -182,6 +183,8 @@ Available options for update:
 --docker-image       The full specified name of the Docker image
 --taupage-ami-id     The full specified name of the AMI
 --instance-type      The type of instance to deploy each node on (e.g. t2.medium)
+--scalyr-key         API Key for writing logs to Scalyr (optional).
+--scalyr-region      Scalyr account region, such as 'eu' (optional).
 --sns-topic          Amazon SNS topic name to use for notifications about Auto-Recovery.
 --sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 ===================  ========================================================
