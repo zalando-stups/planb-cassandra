@@ -33,6 +33,7 @@ def cli(debug: bool):
 @click.option('--no-termination-protection', is_flag=True, default=False)
 @click.option('--use-dmz', is_flag=True, default=False, help='deploy into DMZ subnets using Public IP addresses')
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
+@click.option('--scalyr-region')
 @click.option('--scalyr-key')
 @click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
 @click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
@@ -50,6 +51,7 @@ def create(regions: list,
            no_termination_protection: bool,
            use_dmz: bool,
            hosted_zone: str,
+           scalyr_region: str,
            scalyr_key: str,
            artifact_name: str,
            docker_image: str,
@@ -90,6 +92,7 @@ sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 @click.option('--docker-image', type=str)
 @click.option('--taupage-ami-id', type=str)
 @click.option('--instance-type', type=str)
+@click.option('--scalyr-region')
 @click.option('--scalyr-key')
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
@@ -100,6 +103,7 @@ def update(cluster_name: str,
            docker_image: str,
            taupage_ami_id: str,
            instance_type: str,
+           scalyr_region: str,
            scalyr_key: str,
            sns_topic: str,
            sns_email: str):

@@ -391,6 +391,8 @@ def generate_taupage_user_data(options: dict) -> str:
         },
         'scalyr_account_key': options['scalyr_key']
     }
+    if options['scalyr_region']:
+        data['scalyr_region'] = options['scalyr_region']
 
     if options['environment']:
         data['environment'].update(options['environment'])
