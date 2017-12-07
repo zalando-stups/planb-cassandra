@@ -1,9 +1,11 @@
 import boto3
 import botocore
+import base64
 import yaml
 import json
 import copy
 import time
+import io
 import os
 from datetime import datetime
 
@@ -69,6 +71,17 @@ def load_dict_from_file(filename: str) -> dict:
     if os.path.exists(filename):
         with open(filename, 'r') as f:
             return json.load(f)
+
+
+def get_user_data(ec2: object, instance_id: str) -> dict:
+    resp = ec2.describe_instance_attribute(
+        InstanceId=instance_id,
+        Attribute='userData'
+    )
+    raw_bytes = base64.b64decode(resp['UserData']['Value'])
+    data = str(raw_bytes, 'UTF-8')
+    stream = io.StringIO(data)
+    return yaml.safe_load(stream)
 
 
 def dump_user_data_for_taupage(user_data: dict) -> str:
