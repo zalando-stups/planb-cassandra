@@ -71,8 +71,8 @@ Prerequisites
 Usage
 =====
 
-Create a Cluster
-----------------
+Create a new cluster
+--------------------
 
 To create a cluster named "mycluster" in two regions with 3 nodes per region
 (the default size, enough for testing):
@@ -189,6 +189,95 @@ Available options for update:
 --sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 ===================  ========================================================
 
+Extend an existing cluster
+--------------------------
+
+There are a number of scenarios requiring to extend an existing cluster.  The
+possible use-cases are::
+
+* Add a new "virtual data center"
+* Add a new region
+* Add more nodes to existing data center
+
+Available options for extend:
+
+===========================  ============================================================================
+--from-region                Name of AWS region where a cluster is already running.
+--to-region                  Name of AWS region where a new data center should be created.  This can be the same as "from region", in this case a virtual data center is created.
+--cluster-name               The name of a cluster to extend.
+--ring-size                  Number of nodes to create in the new data center.
+--dc-suffix                  Optional "DC suffix".  When creating a virtual data center be sure to specify a new suffix for each virtual data center you create!
+--num-tokens                 Number of virtual nodes per node.  Default: 256
+--instance-type              AWS EC2 instance type to use for the nodes.  Default: t2.medium
+--volume-type                Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
+--volume-size                Size of EBS data volume in GB for every node.  Default: 16
+--volume-iops                Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
+--no-termination-protection  Don't protect EC2 instances from accidental termination.  Useful for testing and development.
+--use-dmz                    Deploy the new data center into DMZ subnets using Public IPs (required for multi-region setup).
+--hosted-zone                Specify this to create the SRV record for the new data center.  This is optional.
+--artifact-name              Override Pierone artifact name.  Default: planb-cassandra-3.0
+--docker-image               Override default Docker image.
+--environment, -e            Extend/override environment section of Taupage user data.
+--sns-topic                  Amazon SNS topic name to use for notifications about Auto-Recovery.
+--sns-email                  Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
+===========================  ============================================================================
+
+-------------------------------
+Add a new "virtual data center"
+-------------------------------
+
+To add a new virtual data center in the same region where your existing cluster is running run the extend command like this:
+
+.. code-block:: bash
+
+    $ planb.py extend \
+        --from-region eu-central-1 \
+        --to-region eu-central-1 \
+        --cluster-name mycluster \
+        --ring-size 3 \
+        --dc-suffix _new \
+        --hosted-zone myzone.example.com.
+
+.. important::
+
+   The new nodes are created with ``auto_bootstrap: false``.  When creating a
+   new virtual data center in the same region, you **must** specify the DC
+   suffix which doesn't exist in the region yet!  Otherwise you risk adding a
+   number of empty nodes to the cluster, which will be serving read requests
+   and your client applications will suffer from apparent data loss.
+
+After the command has run successfully, you need to login to each of the nodes
+in the new data center and run ``nodetool rebuild $existing_dc_name``.
+
+----------------
+Add a new region
+----------------
+
+To extend a cluster to a new AWS region, run the command like this:
+
+.. code-block:: bash
+
+    $ planb.py extend \
+        --from-region eu-central-1 \
+        --to-region eu-west-1 \
+        --cluster-name mycluster \
+        --ring-size 3 \
+        --use-dmz \
+        --hosted-zone myzone.example.com.
+
+The DC suffix is optional in this case, unless you already have a cluster with
+this name in the target region.  You must specify the DMZ option, and the
+existing cluster must already be running in the DMZ: otherwise the new and
+existing nodes will not be able to communicate with each other.
+
+--------------------------------------
+Add more nodes to existing data center
+--------------------------------------
+
+This is currently unsupported, due to the use of `auto_bootstrap: false` when
+creating new nodes.  In general, it should be possible to override this option
+and add the nodes one by one to the existing data center, but care should be
+taken while doing so.
 
 Client configuration for Public IPs setup
 =========================================
