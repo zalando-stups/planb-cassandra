@@ -19,9 +19,108 @@ import click
 from botocore.exceptions import ClientError
 from clickclick import Action, info
 
-from .common import boto_client, override_ephemeral_block_devices, \
-    dump_user_data_for_taupage, setup_sns_topics_for_alarm, \
-    create_auto_recovery_alarm, ensure_instance_profile
+
+from .common import boto_client, list_instances, \
+    override_ephemeral_block_devices, \
+    get_user_data, dump_user_data_for_taupage, \
+    setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
+    ensure_instance_profile
+
+
+def find_security_group_by_name(ec2: object, sg_name: str) -> dict:
+    resp = ec2.describe_security_groups(GroupNames=[sg_name])
+    return resp['SecurityGroups'][0]
+
+
+def create_security_group(region: str, ips: list, use_dmz: bool,
+                          cluster_name: str, node_ips: dict) -> dict:
+    description = 'Allow Cassandra nodes to talk to each other on port 7001'
+    with Action('Creating Security Group in {}..'.format(region)):
+        ec2 = boto_client('ec2', region)
+        resp = ec2.describe_vpcs()
+        # TODO: support more than one VPC..
+        vpc = resp['Vpcs'][0]
+        sg_name = cluster_name
+        sg = ec2.create_security_group(
+            GroupName=sg_name,
+            VpcId=vpc['VpcId'],
+            Description=description
+        )
+
+        ec2.create_tags(
+            Resources=[sg['GroupId']],
+            Tags=[{'Key': 'Name', 'Value': sg_name}]
+        )
+        ip_permissions = []
+        if use_dmz:
+            # NOTE: we need to allow ALL public IPs (from all regions)
+            for ip in itertools.chain(*node_ips.values()):
+                ingress_rule = {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 7001,  # port range: From-To
+                    'ToPort':   7001,
+                    'IpRanges': [
+                        {
+                            'CidrIp': '{}/32'.format(ip['PublicIp'])
+                        }
+                    ]
+                }
+                ip_permissions.append(ingress_rule)
+        # if internal subnets are used we just allow access from
+        # within the SG, which we also need in multi-region setup
+        # (for the nodetool?)
+        self_ingress_rule = {
+            'IpProtocol': '-1',
+            'UserIdGroupPairs': [{'GroupId': sg['GroupId']}]
+        }
+        ip_permissions.append(self_ingress_rule)
+
+        # if we can find the Odd security group, authorize SSH access from it
+        try:
+            odd_sg = find_security_group_by_name(ec2, 'Odd (SSH Bastion Host)')
+            odd_ingress_rule = {
+                'IpProtocol': 'tcp',
+                'FromPort': 22,  # port range: From-To
+                'ToPort': 22,
+                'UserIdGroupPairs': [{
+                    'GroupId': odd_sg['GroupId']
+                }]
+            }
+            ip_permissions.append(odd_ingress_rule)
+        except ClientError:
+            msg = "No Odd host in region {}, skipping Security Group rule."
+            info(msg.format(region))
+            pass
+
+        ec2.authorize_security_group_ingress(
+            GroupId=sg['GroupId'],
+            IpPermissions=ip_permissions
+        )
+
+        return sg
+
+
+def extend_security_group(region: str, sg: dict, other_region_ips: list):
+    with Action('Updating Security Group in {}..'.format(region)):
+        ip_permissions = [
+            {
+                'IpProtocol': 'tcp',
+                'FromPort': 7001,  # port range: From-To
+                'ToPort':   7001,
+                'IpRanges': [
+                    {
+                        'CidrIp': '{}/32'.format(ip['PublicIp'])
+                    }
+                ]
+            }
+            for ip in other_region_ips
+        ]
+
+        ec2 = boto_client('ec2', region)
+        ec2.authorize_security_group_ingress(
+            GroupId=sg['GroupId'],
+            IpPermissions=ip_permissions
+        )
 
 
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
@@ -29,71 +128,24 @@ def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
     '''
     Allow traffic between regions (or within a VPC, if `use_dmz' is False)
     '''
-    description = 'Allow Cassandra nodes to talk to each other on port 7001'
     for region, ips in node_ips.items():
-        with Action('Configuring Security Group in {}..'.format(region)):
-            ec2 = boto_client('ec2', region)
-            resp = ec2.describe_vpcs()
-            # TODO: support more than one VPC..
-            vpc = resp['Vpcs'][0]
-            sg_name = cluster_name
-            sg = ec2.create_security_group(
-                GroupName=sg_name,
-                VpcId=vpc['VpcId'],
-                Description=description
-            )
-            result[region] = sg
+        result[region] = create_security_group(
+            region, ips, use_dmz, cluster_name, node_ips
+        )
 
-            ec2.create_tags(
-                Resources=[sg['GroupId']],
-                Tags=[{'Key': 'Name', 'Value': sg_name}]
-            )
-            ip_permissions = []
-            if use_dmz:
-                # NOTE: we need to allow ALL public IPs (from all regions)
-                for ip in itertools.chain(*node_ips.values()):
-                    ingress_rule = {
-                        'IpProtocol': 'tcp',
-                        'FromPort': 7001,  # port range: From-To
-                        'ToPort':   7001,
-                        'IpRanges': [{
-                            'CidrIp': '{}/32'.format(ip['PublicIp'])
-                        }]
-                    }
-                    ip_permissions.append(ingress_rule)
-            # if internal subnets are used we just allow access from
-            # within the SG, which we also need in multi-region setup
-            # (for the nodetool?)
-            self_ingress_rule = {
-                'IpProtocol': '-1',
-                'UserIdGroupPairs': [{'GroupId': sg['GroupId']}]
-            }
-            ip_permissions.append(self_ingress_rule)
 
-            # if we can find the Odd security group, authorize SSH access from it
-            try:
-                resp = ec2.describe_security_groups(
-                    GroupNames=['Odd (SSH Bastion Host)']
-                )
-                odd_sg = resp['SecurityGroups'][0]
-                odd_ingress_rule = {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 22,  # port range: From-To
-                    'ToPort': 22,
-                    'UserIdGroupPairs': [{
-                        'GroupId': odd_sg['GroupId']
-                    }]
-                }
-                ip_permissions.append(odd_ingress_rule)
-            except ClientError:
-                msg = "No Odd host in region {}, skipping Security Group rule."
-                info(msg.format(region))
-                pass
-
-            ec2.authorize_security_group_ingress(
-                GroupId=sg['GroupId'],
-                IpPermissions=ip_permissions
-            )
+def get_public_ips_from_sg(sg: dict) -> list:
+    result = []
+    for ip in sg['IpPermissions']:
+        if ip['IpProtocol'] == 'tcp' and \
+           ip['FromPort'] == 7001 and ip['ToPort'] == 7001:
+            for ip_range in ip['IpRanges']:
+                cidr_ip = ip_range.get('CidrIp')
+                if cidr_ip and cidr_ip.endswith('/32'):
+                    result.append({
+                        'PublicIp': cidr_ip.replace('/32', '')
+                    })
+    return result
 
 
 def find_taupage_amis(regions: list) -> dict:
@@ -305,7 +357,9 @@ def make_dns_records(region: str, ips: list) -> list:
     return [{'Value': '1 1 9042 {}'.format(host)} for host in hosts]
 
 
-def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
+def setup_dns_records(
+        cluster_name: str, hosted_zone: str, node_ips: dict, dc_suffix: str=""):
+
     r53 = boto_client('route53')
 
     zone = None
@@ -318,7 +372,9 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
 
     for region, ips in node_ips.items():
         with Action('Setting up Route53 SRV records in {}..'.format(region)):
-            name = '_{}-{}._tcp.{}'.format(cluster_name, region, hosted_zone)
+            name = '_{}{}-{}._tcp.{}'.format(
+                cluster_name, dc_suffix, region, hosted_zone
+            )
             #
             # NB: We always want the clients to connect using private
             # IP addresses.
@@ -345,6 +401,14 @@ def setup_dns_records(cluster_name: str, hosted_zone: str, node_ips: dict):
             )
 
 
+def list_all_seed_node_ips(seed_nodes: dict) -> list:
+    return [
+        ip['_defaultIp']
+        for region, ips in seed_nodes.items()
+        for ip in ips
+    ]
+
+
 def generate_taupage_user_data(options: dict) -> str:
     '''
     Generate Taupage user data to start a Cassandra node
@@ -354,11 +418,7 @@ def generate_taupage_user_data(options: dict) -> str:
     truststore_base64 = base64.b64encode(options['truststore'])
 
     # seed nodes across all regions
-    all_seeds = [
-        ip['_defaultIp']
-        for region, ips in options['seed_nodes'].items()
-        for ip in ips
-    ]
+    all_seeds = list_all_seed_node_ips(options['seed_nodes'])
     data = {
         'runtime': 'Docker',
         'source': options['docker_image'],
@@ -725,5 +785,142 @@ def create_cluster(options: dict):
                 for ip in ips:
                     info('Releasing IP address: {}'.format(ip['PublicIp']))
                     ec2.release_address(AllocationId=ip['AllocationId'])
+
+        raise
+
+
+def extend_cluster(options: dict):
+    ec2 = boto_client('ec2', options['from_region'])
+    running_instances = [
+        i
+        for i in list_instances(ec2, options['cluster_name'])
+        if i['State']['Name'] == 'running'
+    ]
+    if not running_instances:
+        msg = "Could not find any running EC2 instances for {} in {}".format(
+            options['cluster_name'],
+            options['from_region']
+        )
+        raise click.UsageError(msg)
+
+    # TODO: don't override docker image?
+    options = validate_artifact_version(options)
+    options = read_environment(options)
+
+    # List of IP addresses by region
+    node_ips = collections.defaultdict(list)
+
+    # Mapping of region name to the Security Group
+    security_groups = {}
+
+    try:
+        # TODO: get it from a running instance details?
+        taupage_amis = find_taupage_amis([options['to_region']])
+
+        subnets = get_subnets(
+            'dmz-' if options['use_dmz'] else 'internal-',
+            [options['to_region']]
+        )
+        allocate_ip_addresses(
+            subnets, options['ring_size'], node_ips,
+            take_elastic_ips=options['use_dmz']
+        )
+
+        if options['sns_topic'] or options['sns_email']:
+            alarm_topics = setup_sns_topics_for_alarm(
+                [options['to_region']],
+                options['sns_topic'],
+                options['sns_email']
+            )
+        else:
+            alarm_topics = {}
+
+        if options['hosted_zone']:
+            setup_dns_records(
+                options['cluster_name'],
+                options['hosted_zone'],
+                node_ips,
+                options['dc_suffix']
+            )
+
+        cluster_sg = find_security_group_by_name(ec2, options['cluster_name'])
+        security_groups = {
+            options['from_region']: cluster_sg
+        }
+        if options['to_region'] != options['from_region']:
+            all_ips = node_ips.copy()
+            all_ips[options['from_region']] = get_public_ips_from_sg(cluster_sg)
+
+            security_groups[options['to_region']] = create_security_group(
+                options['to_region'],
+                node_ips[options['to_region']],
+                options['use_dmz'],
+                options['cluster_name'],
+                all_ips
+            )
+            # TODO: no rollback for now
+            extend_security_group(
+                options['from_region'],
+                cluster_sg,
+                node_ips[options['to_region']]
+            )
+
+        # We should have up to 3 seeds nodes per DC
+        seed_count = min(options['ring_size'], 3)
+        seed_nodes = pick_seed_node_ips(node_ips, seed_count)
+
+        options = dict(
+            options,
+            seed_count=seed_count,
+            seed_nodes=seed_nodes
+        )
+
+        user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
+
+        env = user_data['environment']
+        env['AUTO_BOOTSTRAP'] = 'false'
+        env['DC_SUFFIX'] = options['dc_suffix']
+
+        new_seeds = list_all_seed_node_ips(seed_nodes)
+        env['SEEDS'] = "{},{}".format(','.join(new_seeds), env['SEEDS'])
+
+        instance_profile = ensure_instance_profile(options['cluster_name'])
+
+        # we only launch instances in the target region:
+        options['regions'] = [options['to_region']]
+
+        options = dict(
+            options,
+            node_ips=node_ips,
+            security_groups=security_groups,
+            taupage_amis=taupage_amis,
+            subnets=subnets,
+            alarm_topics=alarm_topics,
+            user_data=user_data,
+            instance_profile=instance_profile
+        )
+        launch_seed_nodes(options)
+
+        # TODO: make sure all seed nodes are up
+        launch_normal_nodes(options)
+
+    except:
+        print_failure_message()
+
+        if options['to_region'] != options['from_region']:
+            region = options['to_region']
+            sg = security_groups.get(region)
+            if sg:
+                info('Cleaning up security group: {}'.format(sg['GroupId']))
+                ec2 = boto_client('ec2', region)
+                ec2.delete_security_group(GroupId=sg['GroupId'])
+
+        if options['use_dmz']:
+            for region, ips in node_ips.items():
+                ec2 = boto_client('ec2', region)
+                for ip in ips:
+                    if 'AllocationId' in ip:
+                        info('Releasing IP address: {}'.format(ip['PublicIp']))
+                        ec2.release_address(AllocationId=ip['AllocationId'])
 
         raise
