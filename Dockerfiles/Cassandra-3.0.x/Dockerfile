@@ -22,6 +22,7 @@ RUN apt-get -y install vim less sysstat maven \
     mv target/TimeWindowCompactionStrategy-3.0.0.jar /usr/share/cassandra/lib/ && \
     rm -rf target ~/.m2 && \
     apt-get -y remove maven && \
+    apt-get -y autoremove && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
