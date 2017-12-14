@@ -44,6 +44,10 @@ def test_build_run_instances_params():
                 '/var/lib/cassandra': {
                     'partition': '/dev/xvdf'
                 }
+            },
+            'environment': {
+                'key0': 'keepval0',
+                'key1': 'oldval1'
             }
         }
     }
@@ -52,6 +56,10 @@ def test_build_run_instances_params():
         'docker_image': 'docker.registry/cassandra:123',
         'taupage_ami_id': 'ami-654321',
         'instance_type': 'm4.xlarge',
+        'environment': {
+            'key1': 'value1',
+            'key2': 'value2'
+        },
         'scalyr_region': 'eu',
         'scalyr_key': 'new-shiny-scalyr-key'
     }
@@ -76,6 +84,11 @@ def test_build_run_instances_params():
                 '/var/lib/cassandra': {
                     'partition': '/dev/xvdf'
                 }
+            },
+            'environment': {
+                'key0': 'keepval0',
+                'key1': 'value1',
+                'key2': 'value2'
             },
             'scalyr_region': 'eu',
             'scalyr_account_key': 'new-shiny-scalyr-key'

@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from planb.create_cluster import generate_private_ip_addresses, \
-    IpAddressPoolDepletedException, read_environment
+    IpAddressPoolDepletedException
 
 
 def test_generate_private_ip_addresses():
@@ -56,10 +56,3 @@ def test_generate_private_ip_addresses():
         list(generate_private_ip_addresses(
                 ec2, [{'CidrBlock': '192.168.1.0/27'}], 21
             ))
-
-
-def test_read_environment():
-    raw_list = ["key=value", "base64=dGVzdA=="]
-    parsed_dict = {'key': 'value', 'base64': 'dGVzdA=='}
-    expected = {'environment': parsed_dict}
-    assert read_environment({'environment': raw_list}) == expected

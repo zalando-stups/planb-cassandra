@@ -142,6 +142,7 @@ def extend(from_region: str,
 @click.option('--instance-type', type=str)
 @click.option('--scalyr-region')
 @click.option('--scalyr-key')
+@click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
 def update(cluster_name: str,
@@ -153,12 +154,9 @@ def update(cluster_name: str,
            instance_type: str,
            scalyr_region: str,
            scalyr_key: str,
+           environment: list,
            sns_topic: str,
            sns_email: str):
-
-    if not(docker_image or taupage_ami_id):
-        msg = "Please specify at least one of --docker-image or --taupage-ami-id"
-        raise click.UsageError(msg)
 
     update_cluster(options=locals())
 

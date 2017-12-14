@@ -15,7 +15,7 @@ from .common import boto_client, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, get_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    ensure_instance_profile
+    ensure_instance_profile, environment_as_dict
 
 
 """
@@ -285,6 +285,13 @@ def build_run_instances_params(
     if docker_image:
         user_data_changes['source'] = docker_image
 
+    environment = options.get('environment')
+    if environment:
+        user_data_changes['environment'] = dict(
+            params['UserData'].get('environment', {}),
+            **environment
+        )
+
     scalyr_region = options.get('scalyr_region')
     if scalyr_region:
         user_data_changes['scalyr_region'] = scalyr_region
@@ -519,6 +526,7 @@ def update_cluster(options: dict):
     else:
         alarm_topics = {}
     options = dict(options, alarm_topics=alarm_topics)
+    options['environment'] = environment_as_dict(options.get('environment', []))
 
     # TODO: List all nodes with IPs and some status information
     for i in instances:
