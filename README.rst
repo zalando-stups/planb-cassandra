@@ -185,6 +185,7 @@ Available options for update:
 --instance-type      The type of instance to deploy each node on (e.g. t2.medium)
 --scalyr-key         API Key for writing logs to Scalyr (optional).
 --scalyr-region      Scalyr account region, such as 'eu' (optional).
+--environment, -e    Extend/override environment section of Taupage user data.
 --sns-topic          Amazon SNS topic name to use for notifications about Auto-Recovery.
 --sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 ===================  ========================================================

@@ -250,3 +250,7 @@ def ensure_instance_profile(cluster_name: str):
     if profile is None:
         profile = create_instance_profile(cluster_name)
     return profile
+
+
+def environment_as_dict(environment: list) -> dict:
+    return dict(map(lambda x: x.split("=", 1), environment))

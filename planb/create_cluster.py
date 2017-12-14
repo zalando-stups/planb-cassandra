@@ -24,7 +24,7 @@ from .common import boto_client, list_instances, \
     override_ephemeral_block_devices, \
     get_user_data, dump_user_data_for_taupage, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    ensure_instance_profile
+    ensure_instance_profile, environment_as_dict
 
 
 def find_security_group_by_name(ec2: object, sg_name: str) -> dict:
@@ -677,21 +677,9 @@ def validate_artifact_version(options: dict) -> dict:
     return dict(options, docker_image=docker_image, image_version=image_version)
 
 
-def read_environment(options: dict) -> dict:
-    if options['environment']:
-        return dict(
-            options,
-            environment=dict(
-                map(lambda x: x.split("=", 1), options['environment'])
-            )
-        )
-    else:
-        return options
-
-
 def create_cluster(options: dict):
     options = validate_artifact_version(options)
-    options = read_environment(options)
+    options['environment'] = environment_as_dict(options.get('environment', []))
 
     keystore, truststore = generate_certificate(options['cluster_name'])
 
@@ -805,7 +793,7 @@ def extend_cluster(options: dict):
 
     # TODO: don't override docker image?
     options = validate_artifact_version(options)
-    options = read_environment(options)
+    options['environment'] = environment_as_dict(options.get('environment', []))
 
     # List of IP addresses by region
     node_ips = collections.defaultdict(list)
