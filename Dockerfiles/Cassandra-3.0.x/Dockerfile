@@ -15,11 +15,11 @@ RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-m
 RUN apt-get -y install vim less sysstat maven \
     cassandra=$CASSIE_VERSION \
     cassandra-tools=$CASSIE_VERSION && \
-    twcs_commit=0543c3f6c122a521fea65b3a719245ea62bb705c && \
-    curl -sL https://github.com/jeffjirsa/twcs/archive/${twcs_commit}.tar.gz | tar xz -C /usr/src && \
+    twcs_commit=10ee91c6f409aa249c8d439f7670d8b997ab0869 && \
+    curl -sL https://github.com/a1exsh/twcs/archive/${twcs_commit}.tar.gz | tar xz -C /usr/src && \
     cd /usr/src/twcs-${twcs_commit}/TimeWindowCompactionStrategy && \
     mvn package && \
-    mv target/TimeWindowCompactionStrategy-3.0.0.jar /usr/share/cassandra/lib/ && \
+    mv target/TimeWindowCompactionStrategy-3.0.15.jar /usr/share/cassandra/lib/ && \
     rm -rf target ~/.m2 && \
     apt-get -y remove maven && \
     apt-get -y autoremove && \
