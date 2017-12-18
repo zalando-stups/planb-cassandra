@@ -45,6 +45,7 @@ sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 @click.argument('regions', nargs=-1)
 @click.option('--cluster-name', required=True, callback=validate_cluster_name, help='name of the cluster, required')
 @click.option('--cluster-size', default=3, type=int, help='number of nodes per region, default: 3')
+#@click.option('--dc-suffix', default='', type=str, callback=validate_dc_suffix)
 @click.option('--num-tokens', default=256, type=int, help='number of virtual nodes per node, default: 256')
 @click.option('--instance-type', default='t2.medium', help='default: t2.medium')
 @click.option('--volume-type', default='gp2', help='gp2 (default) | io1 | standard')

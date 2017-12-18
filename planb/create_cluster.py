@@ -244,7 +244,8 @@ class IpAddressPoolDepletedException(Exception):
         super(IpAddressPoolDepletedException, self).__init__(msg)
 
 
-def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int):
+def generate_private_ip_addresses(
+        subnets: list, cluster_size: int, taken_ips: list):
 
     def try_next_address(ips, subnet):
         try:
@@ -275,16 +276,26 @@ def generate_private_ip_addresses(ec2: object, subnets: list, cluster_size: int)
         idx = i % len(subnets)
 
         ip = try_next_address(network_ips[idx], subnets[idx])
-
-        resp = ec2.describe_instances(
-            Filters=[{
-                'Name': 'private-ip-address',
-                'Values': [ip]
-            }]
-        )
-        if not resp['Reservations']:
+        if ip not in taken_ips:
             i += 1
             yield ip
+
+
+def xxx(subnets: list, cluster_size: int, taken_ips: list) -> list:
+    addresses = []
+    for ip in generate_private_ip_addresses(subnets, cluster_size, taken_ips):
+        address = {'PrivateIp': ip}
+
+        if take_elastic_ips:
+            resp = ec2.allocate_address(Domain='vpc')
+            address['_defaultIp'] = resp['PublicIp']
+            address['PublicIp'] = resp['PublicIp']
+            address['AllocationId'] = resp['AllocationId']
+        else:
+            address['_defaultIp'] = ip
+        addresses.append(address)
+
+    return addresses
 
 
 def allocate_ip_addresses(
@@ -298,19 +309,17 @@ def allocate_ip_addresses(
         with Action('Allocating IP addresses in {}..'.format(region)) as act:
             ec2 = boto_client('ec2', region)
 
-            for ip in generate_private_ip_addresses(ec2, subnets, cluster_size):
-                address = {'PrivateIp': ip}
+            taken_ips = list_taken_private_ips(ec2)
+            node_ips[region] = ...(subnets, cluster_size, taken_ips)
 
-                if take_elastic_ips:
-                    resp = ec2.allocate_address(Domain='vpc')
-                    address['_defaultIp'] = resp['PublicIp']
-                    address['PublicIp'] = resp['PublicIp']
-                    address['AllocationId'] = resp['AllocationId']
-                else:
-                    address['_defaultIp'] = ip
+        # resp = ec2.describe_instances(
+        #     Filters=[{
+        #         'Name': 'private-ip-address',
+        #         'Values': [ip]
+        #     }]
+        # )
+        # if not resp['Reservations']:
 
-                node_ips[region].append(address)
-                act.progress()
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -409,34 +418,34 @@ def list_all_seed_node_ips(seed_nodes: dict) -> list:
     ]
 
 
-def generate_taupage_user_data(options: dict) -> str:
+def create_user_data_for_ring(cluster: dict, ring: dict) -> dict:
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
     '''
-    keystore_base64 = base64.b64encode(options['keystore'])
-    truststore_base64 = base64.b64encode(options['truststore'])
+    keystore_base64 = base64.b64encode(cluster['keystore'])
+    truststore_base64 = base64.b64encode(cluster['truststore'])
 
     # seed nodes across all regions
-    all_seeds = list_all_seed_node_ips(options['seed_nodes'])
+    all_seeds = list_all_seed_node_ips(cluster['seed_nodes'])
     data = {
         'runtime': 'Docker',
-        'source': options['docker_image'],
-        'application_id': options['cluster_name'],
-        'application_version': options['image_version'],
+        'source': cluster['docker_image'],
+        'application_id': cluster['name'],
+        'application_version': cluster['docker_image'].split(':')[-1], # TODO: WTF?
         'networking': 'host',
         'ports': {
             '7001': '7001',
             '9042': '9042'
         },
         'environment': {
-            'CLUSTER_NAME': options['cluster_name'],
-            'NUM_TOKENS': options['num_tokens'],
-            'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
+            'CLUSTER_NAME': cluster['name'],
+            'NUM_TOKENS': ring['num_tokens'],
+            'SUBNET_TYPE': 'dmz' if ring['dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
             'TRUSTSTORE': str(truststore_base64, 'UTF-8'),
-            'ADMIN_PASSWORD': generate_password()
+            'ADMIN_PASSWORD': cluster['admin_password']
         },
         'volumes': {
             'ebs': {
@@ -449,13 +458,13 @@ def generate_taupage_user_data(options: dict) -> str:
                 'options': 'noatime,nodiratime'
             }
         },
-        'scalyr_account_key': options['scalyr_key']
+        'scalyr_account_key': cluster['scalyr_key']
     }
-    if options['scalyr_region']:
-        data['scalyr_region'] = options['scalyr_region']
+    if cluster.get('scalyr_region'):
+        data['scalyr_region'] = cluster['scalyr_region']
 
-    if options['environment']:
-        data['environment'].update(options['environment'])
+    if ring.get('environment'):
+        data['environment'].update(ring['environment'])
 
     return data
 
@@ -677,7 +686,71 @@ def validate_artifact_version(options: dict) -> dict:
     return dict(options, docker_image=docker_image, image_version=image_version)
 
 
+def get_or_create_user_data(from_region: str, cluster: dict, ring: dict) -> dict:
+    if from_region:
+        ec2 = boto_client('ec2', from_region)
+        running_instances = [
+            i
+            for i in list_instances(ec2, cluster['name'])
+            if i['State']['Name'] == 'running'
+        ]
+        if not running_instances:
+            msg = "Could not find any running EC2 instances for {} in {}".format(
+                cluster['name'],
+                from_region
+            )
+            raise click.UsageError(msg)
+        user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
+    else:
+        user_data = generate_taupage_user_data()
+
+    return user_data
+
+
+def create_rings(cluster: dict, from_region: str, region_to_rings: dict):
+    # prepare
+    # if !from_region: generate keystore & admin password
+    # * enrich cluster with seeds
+    # dostuff
+    # * per region
+    # ** create user data template
+    # ** launch seed nodes
+    # ** launch normal nodes
+    # cleanup
+    pass    
+
+
 def create_cluster(options: dict):
+    cluster = {
+        'name': options['cluster_name'],
+        'protect_from_termination': not(options['no_termination_protection']),
+        'hosted_zone': options['hosted_zone'],
+        'scalyr_region': options['scalyr_region'],
+        'scalyr_key': options['scalyr_key'],
+        'docker_image': options['docker_image'], # TODO: resolve using artifact name
+        'environment': options['environment'],
+        'sns_topic': options['sns_topic'],
+        'sns_email': options['sns_email']
+    }
+    rings = {
+        region: {
+            'size': options['cluster_size'],
+            'dmz': options['use_dmz'],
+            'dc_suffix': options['dc_suffix'],
+            'num_tokens': options['num_tokens'],
+            'instance_type': options['instance_type'],
+            'volume_type': options['volume_type'],
+            'volume_size': options['volume_size'],
+            'volume_iops': options['volume_iops'],
+            'taupage_ami': None # TODO: let to override
+        }
+        for region in options['regions']
+    }
+    return create_rings(cluster, from_region=None, region_to_rings=rings)
+
+################################################################################
+# old implementation
+#
     options = validate_artifact_version(options)
     options['environment'] = environment_as_dict(options.get('environment', []))
 
@@ -778,18 +851,37 @@ def create_cluster(options: dict):
 
 
 def extend_cluster(options: dict):
-    ec2 = boto_client('ec2', options['from_region'])
-    running_instances = [
-        i
-        for i in list_instances(ec2, options['cluster_name'])
-        if i['State']['Name'] == 'running'
-    ]
-    if not running_instances:
-        msg = "Could not find any running EC2 instances for {} in {}".format(
-            options['cluster_name'],
-            options['from_region']
-        )
-        raise click.UsageError(msg)
+    cluster = {
+        'name': options['cluster_name'],
+        'protect_from_termination': not(options['no_termination_protection']),
+        'hosted_zone': options['hosted_zone'],
+        'scalyr_region': options['scalyr_region'],
+        'scalyr_key': options['scalyr_key'],
+        'docker_image': options['docker_image'], # TODO: resolve using artifact name
+        'environment': options['environment'],
+        'sns_topic': options['sns_topic'],
+        'sns_email': options['sns_email']
+    }
+    rings = {
+        options['to_region']: {
+            'size': options['ring_size'],
+            'dmz': options['use_dmz'],
+            'dc_suffix': options['dc_suffix'],
+            'num_tokens': options['num_tokens'],
+            'instance_type': options['instance_type'],
+            'volume_type': options['volume_type'],
+            'volume_size': options['volume_size'],
+            'volume_iops': options['volume_iops'],
+            'taupage_ami': None
+        }
+    }
+    return create_rings(
+        cluster, from_region=options['from_region'], region_to_rings=rings
+    )
+
+################################################################################
+# old implementation
+#
 
     # TODO: don't override docker image?
     options = validate_artifact_version(options)
@@ -863,7 +955,6 @@ def extend_cluster(options: dict):
             seed_nodes=seed_nodes
         )
 
-        user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
 
         env = user_data['environment']
         env['AUTO_BOOTSTRAP'] = 'false'
