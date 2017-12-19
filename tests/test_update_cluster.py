@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 from planb.update_cluster import select_keys, tags_as_dict, \
-    get_user_data, build_run_instances_params
+    build_run_instances_params
 
 
 def test_select_keys():
@@ -13,15 +13,6 @@ def test_tags_as_dict():
     tagdict = {'key1': 'val1',
                'key2': 'val2'}
     assert tags_as_dict(taglist) == tagdict
-
-
-def test_get_user_data():
-    ec2 = MagicMock()
-    ec2.describe_instance_attribute.return_value = {
-        'UserData': {'Value': "dGVzdDogSGVsbG8hCg=="}
-    }
-    user_data = {'test': 'Hello!'}
-    assert get_user_data(ec2, 'i-123') == user_data
 
 
 def test_build_run_instances_params():

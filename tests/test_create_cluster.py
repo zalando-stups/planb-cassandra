@@ -1,11 +1,21 @@
 import pytest
-from unittest.mock import MagicMock
 
 from planb.create_cluster import \
     generate_private_ip_addresses, \
     IpAddressPoolDepletedException, \
     create_user_data_template, \
-    create_user_data_for_ring
+    create_user_data_for_ring, \
+    calc_seed_nodes_count
+
+
+def test_calc_seed_nodes_count():
+    seed_count = calc_seed_nodes_count(
+        rings=[
+            {'size': 7}, # 3 seeds
+            {'size': 2}  # 2 seeds
+        ]
+    )
+    assert seed_count == 5
 
 
 def test_generate_private_ip_addresses():

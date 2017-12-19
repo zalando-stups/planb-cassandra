@@ -10,12 +10,14 @@ import re
 import os
 
 # TODO: can we avoid the explicit list here?
-from .common import boto_client, \
-    dump_dict_as_file, load_dict_from_file, \
-    dump_user_data_for_taupage, list_instances, \
-    override_ephemeral_block_devices, get_user_data, \
+from .aws import boto_client, \
+    list_instances, fetch_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    ensure_instance_profile, environment_as_dict
+    ensure_instance_profile
+
+from .common import dump_dict_as_file, load_dict_from_file, \
+    decode_user_data, dump_user_data_for_taupage, \
+    override_ephemeral_block_devices, environment_as_dict
 
 
 """
@@ -177,7 +179,7 @@ def prepare_update(ec2: object, volume: dict, options: dict):
     if not os.path.exists(instance_dump_file):
         instance_to_dump = dict(
             instance,
-            UserData=get_user_data(ec2, instance_id),
+            UserData=decode_user_data(fetch_user_data(ec2, instance_id)),
             DisableApiTermination=disable_api_termination
         )
         dump_dict_as_file(instance_to_dump, instance_dump_file)

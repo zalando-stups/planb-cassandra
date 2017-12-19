@@ -20,12 +20,14 @@ import click
 from botocore.exceptions import ClientError
 from clickclick import Action, info
 
-
-from .common import boto_client, list_instances, \
-    override_ephemeral_block_devices, \
-    get_user_data, dump_user_data_for_taupage, \
+from .aws import boto_client, list_instances, fetch_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
-    ensure_instance_profile, environment_as_dict
+    ensure_instance_profile
+
+from .common import override_ephemeral_block_devices, \
+    dump_user_data_for_taupage, environment_as_dict
+
+MAX_SEEDS_PER_RING = 3
 
 
 def find_security_group_by_name(ec2: object, sg_name: str) -> dict:
@@ -156,6 +158,7 @@ def find_taupage_amis(regions: list) -> dict:
     result = {}
     for region in regions:
         with Action('Finding latest Taupage AMI in {}..'.format(region)):
+            # TODO: can we use our wrapped boto client here as well?
             ec2 = boto3.resource('ec2', region)
             filters = [
                 {'Name': 'name', 'Values': ['*Taupage-AMI-*']},
@@ -247,6 +250,10 @@ def init_cluster_secuirty_features(cluster: dict):
     )
 
 
+def calc_seed_nodes_count(rings: list) -> int:
+    return sum([min(r['size'], MAX_SEEDS_PER_RING) for r in rings])
+
+
 class IpAddressPoolDepletedException(Exception):
 
     def __init__(self, cidr_block: str):
@@ -291,9 +298,20 @@ def generate_private_ip_addresses(
             yield ip
 
 
-def xxx(subnets: list, cluster_size: int, taken_ips: list) -> list:
+def list_taken_private_ips(ec2: object) -> list:
+    #paginator = ec2.get_paginator('describe_instances')
+    #resp = paginator.paginate().build_full_result()
+    #
+    # TODO: paginators don't enjoy our retry/refresh wrappers unfortunately.
+    # Using MaxResults=1000 sounds like a good enough approximation for now.
+    #
+    instances = list_instances(ec2, MaxResults=1000)
+    return [i['PrivateIpAddress'] for i in instances]
+
+
+def xxx(subnets: list, ips_count: int, taken_ips: list) -> list:
     addresses = []
-    for ip in generate_private_ip_addresses(subnets, cluster_size, taken_ips):
+    for ip in generate_private_ip_addresses(subnets, ips_count, taken_ips):
         address = {'PrivateIp': ip}
 
         if take_elastic_ips:
@@ -320,16 +338,7 @@ def allocate_ip_addresses(
             ec2 = boto_client('ec2', region)
 
             taken_ips = list_taken_private_ips(ec2)
-            node_ips[region] = ...(subnets, cluster_size, taken_ips)
-
-        # resp = ec2.describe_instances(
-        #     Filters=[{
-        #         'Name': 'private-ip-address',
-        #         'Values': [ip]
-        #     }]
-        # )
-        # if not resp['Reservations']:
-
+            node_ips[region] = xxx(subnets, cluster_size, taken_ips)
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -731,14 +740,15 @@ def create_rings(cluster: dict, from_region: str, region_to_rings: dict):
     else:
         init_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster)
-    
+
     # dostuff
     # * per region
+    # ** setup or extend SGs
     # ** per ring
+    # TODO: consider starting all seed nodes from all rings first, then normal ones
     for region, rings in region_to_rings.items():
         for ring in rings:
             user_data = create_user_data_for_ring(user_data_template, ring)
-    # *** create user data template
     # *** launch seed nodes
     # *** launch normal nodes
 
