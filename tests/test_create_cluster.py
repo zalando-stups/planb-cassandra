@@ -1,8 +1,10 @@
 import pytest
 from unittest.mock import MagicMock
 
-from planb.create_cluster import generate_private_ip_addresses, \
+from planb.create_cluster import \
+    generate_private_ip_addresses, \
     IpAddressPoolDepletedException, \
+    create_user_data_template, \
     create_user_data_for_ring
 
 
@@ -66,6 +68,7 @@ def test_create_user_data_template():
         'name': 'hello-world',
         'keystore': b'123',
         'truststore': b'321',
+        'admin_password': 'qwerty',
         'seed_nodes': {
             'eu-central-1': [
                 {'_defaultIp': '12.34.56.78'},
@@ -73,16 +76,8 @@ def test_create_user_data_template():
             ]
         },
         'docker_image': 'repo/team/artifact:v123',
-        'admin_password': 'qwerty',
         'scalyr_key': 'scalyr-key==',
         'scalyr_region': 'eu'
-    }
-    ring = {
-        'dmz': False,
-        'num_tokens': 1,
-        'environment': {
-            'EXTRA1': 'value1'
-        }
     }
     expected = {
         'runtime': 'Docker',
@@ -96,13 +91,10 @@ def test_create_user_data_template():
         },
         'environment': {
             'CLUSTER_NAME': cluster['name'],
-            'NUM_TOKENS': ring['num_tokens'],
-            'SUBNET_TYPE': 'internal',
             'SEEDS': '12.34.56.78,34.56.78.90',
             'KEYSTORE': 'MTIz',
             'TRUSTSTORE': 'MzIx',
             'ADMIN_PASSWORD': 'qwerty',
-            'EXTRA1': 'value1'
         },
         'volumes': {
             'ebs': {
@@ -118,4 +110,30 @@ def test_create_user_data_template():
         'scalyr_account_key': 'scalyr-key==',
         'scalyr_region': 'eu'
     }
-    assert create_user_data_for_ring(cluster, ring) == expected
+    assert create_user_data_template(cluster) == expected
+
+
+def test_create_user_data_for_ring():
+    template = {
+        'key': 'unchanged',
+        'environment': {
+            'OTHER': 'stuff',
+        }
+    }
+    ring = {
+        'dmz': False,
+        'num_tokens': 1,
+        'environment': {
+            'EXTRA1': 'value1'
+        }
+    }
+    expected = {
+        'key': 'unchanged',
+        'environment': {
+            'OTHER': 'stuff',
+            'NUM_TOKENS': 1,
+            'SUBNET_TYPE': 'internal',
+            'EXTRA1': 'value1'
+        }
+    }
+    assert create_user_data_for_ring(template, ring) == expected

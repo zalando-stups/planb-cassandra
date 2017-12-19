@@ -8,6 +8,7 @@ import netaddr
 import random
 import string
 import base64
+import copy
 import time
 import sys
 import re
@@ -237,6 +238,15 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
+def init_cluster_secuirty_features(cluster: dict):
+    "Enriches the cluster dict with admin password and key/trust-store data."
+
+    cluster['admin_password'] = generate_password()
+    cluster['keystore'], cluster['truststore'] = generate_certificate(
+        cluster['name']
+    )
+
+
 class IpAddressPoolDepletedException(Exception):
 
     def __init__(self, cidr_block: str):
@@ -418,7 +428,7 @@ def list_all_seed_node_ips(seed_nodes: dict) -> list:
     ]
 
 
-def create_user_data_for_ring(cluster: dict, ring: dict) -> dict:
+def create_user_data_template(cluster: dict) -> dict:
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
@@ -440,8 +450,6 @@ def create_user_data_for_ring(cluster: dict, ring: dict) -> dict:
         },
         'environment': {
             'CLUSTER_NAME': cluster['name'],
-            'NUM_TOKENS': ring['num_tokens'],
-            'SUBNET_TYPE': 'dmz' if ring['dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
             'TRUSTSTORE': str(truststore_base64, 'UTF-8'),
@@ -462,6 +470,16 @@ def create_user_data_for_ring(cluster: dict, ring: dict) -> dict:
     }
     if cluster.get('scalyr_region'):
         data['scalyr_region'] = cluster['scalyr_region']
+
+    return data
+
+
+def create_user_data_for_ring(template: dict, ring: dict) -> dict:
+    data = copy.deepcopy(template)
+
+    env = data['environment']
+    env['NUM_TOKENS'] = ring['num_tokens']
+    env['SUBNET_TYPE'] = 'dmz' if ring['dmz'] else 'internal'
 
     if ring.get('environment'):
         data['environment'].update(ring['environment'])
@@ -686,38 +704,45 @@ def validate_artifact_version(options: dict) -> dict:
     return dict(options, docker_image=docker_image, image_version=image_version)
 
 
-def get_or_create_user_data(from_region: str, cluster: dict, ring: dict) -> dict:
-    if from_region:
-        ec2 = boto_client('ec2', from_region)
-        running_instances = [
-            i
-            for i in list_instances(ec2, cluster['name'])
-            if i['State']['Name'] == 'running'
-        ]
-        if not running_instances:
-            msg = "Could not find any running EC2 instances for {} in {}".format(
-                cluster['name'],
-                from_region
-            )
-            raise click.UsageError(msg)
-        user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
-    else:
-        user_data = generate_taupage_user_data()
+def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
+    ec2 = boto_client('ec2', from_region)
+    running_instances = [
+        i
+        for i in list_instances(ec2, cluster['name'])
+        if i['State']['Name'] == 'running'
+    ]
+    if not running_instances:
+        msg = "Could not find any running EC2 instances for {} in {}".format(
+            cluster['name'],
+            from_region
+        )
+        raise click.UsageError(msg)
 
-    return user_data
+    # TODO: should user be able to specify the clone-from instance?
+    return get_user_data(ec2, running_instances[0]['InstanceId'])
 
 
 def create_rings(cluster: dict, from_region: str, region_to_rings: dict):
     # prepare
-    # if !from_region: generate keystore & admin password
+    # * take ip addresses
     # * enrich cluster with seeds
+    if from_region:
+        user_data_template = fetch_user_data_template(from_region, cluster)
+    else:
+        init_cluster_secuirty_features(cluster)
+        user_data_template = create_user_data_template(cluster)
+    
     # dostuff
     # * per region
-    # ** create user data template
-    # ** launch seed nodes
-    # ** launch normal nodes
+    # ** per ring
+    for region, rings in region_to_rings.items():
+        for ring in rings:
+            user_data = create_user_data_for_ring(user_data_template, ring)
+    # *** create user data template
+    # *** launch seed nodes
+    # *** launch normal nodes
+
     # cleanup
-    pass    
 
 
 def create_cluster(options: dict):
