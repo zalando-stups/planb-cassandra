@@ -24,6 +24,14 @@ REGION_RINGS = {
     'eu-central-1': {
         'subnets': [
             {
+                'name': 'dmz-eu-central-1a',
+                'cidr_block': '10.0.0.0/24'
+            },
+            {
+                'name': 'dmz-eu-central-1b',
+                'cidr_block': '10.10.0.0/24'
+            },
+            {
                 'name': 'internal-eu-central-1a',
                 'cidr_block': '172.31.0.0/24'
             },
@@ -33,12 +41,22 @@ REGION_RINGS = {
             }
         ],
         'rings': [
-            {'size': 5},
-            {'size': 2}
+            {
+                'size': 5,
+                'dmz': False
+            },
+            {
+                'size': 2,
+                'dmz': True
+            }
         ]
     },
     'eu-west-1': {
         'subnets': [
+            {
+                'name': 'dmz-eu-west-1a',
+                'cidr_block': '10.0.0.0/24'
+            },
             {
                 'name': 'internal-eu-west-1a',
                 'cidr_block': '172.31.100.0/24'
@@ -53,7 +71,10 @@ REGION_RINGS = {
             }
         ],
         'rings': [
-            {'size': 5}
+            {
+                'size': 5,
+                'dmz': False
+            }
         ]
     }
 }
@@ -75,8 +96,8 @@ def test_take_private_ips_for_seeds():
         'internal-eu-central-1b': ['172.31.8.12']
     }
     expected['eu-central-1']['rings'][1]['seeds'] = {
-        'internal-eu-central-1a': ['172.31.0.13'],
-        'internal-eu-central-1b': ['172.31.8.13']
+        'dmz-eu-central-1a': ['10.0.0.11'],
+        'dmz-eu-central-1b': ['10.10.0.11']
     }
     expected['eu-west-1']['rings'][0]['seeds'] = {
         'internal-eu-west-1a': ['172.31.100.12'],
@@ -87,7 +108,7 @@ def test_take_private_ips_for_seeds():
     assert take_private_ips_for_seeds(REGION_RINGS, region_taken_ips) == expected
     assert set(collect_seed_nodes(expected)) == set([
         '172.31.0.11', '172.31.0.12', '172.31.8.12',
-        '172.31.0.13', '172.31.8.13',
+        '10.0.0.11', '10.10.0.11',
         '172.31.100.12', '172.31.108.11', '172.31.116.12'
     ])
 
@@ -97,12 +118,15 @@ def test_take_private_ips_for_seeds():
                 'localdc': {
                     'subnets': [
                         {
-                            'name': '192-168-1',
+                            'name': 'internal-192-168-1',
                             'cidr_block': '192.168.1.0/30'
                         }
                     ] ,
                     'rings': [
-                        {'size': 10}
+                        {
+                            'size': 10,
+                            'dmz': False
+                        }
                     ]
                 }
             },
@@ -115,12 +139,15 @@ def test_take_private_ips_for_seeds():
             'localdc': {
                 'subnets': [
                     {
-                        'name': '10-0-0',
+                        'name': 'internal-10-0-0',
                         'cidr_block': '10.0.0.0/27'
                     }
                 ] ,
                 'rings': [
-                    {'size': 10}
+                    {
+                        'size': 10,
+                        'dmz': False
+                    }
                 ]
             }
         },

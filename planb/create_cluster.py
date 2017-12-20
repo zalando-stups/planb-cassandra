@@ -302,18 +302,21 @@ def take_private_ips_for_seeds(
         subnets = region['subnets']
 
         for ring in region['rings']:
-            ring['seeds'] = {s['name']: [] for s in subnets}
+            subnet_prefix = 'dmz-' if ring['dmz'] else 'internal-'
+            ring_subnets = [s for s in subnets
+                            if s['name'].startswith(subnet_prefix)]
+            ring['seeds'] = {s['name']: [] for s in ring_subnets}
 
             i = 0
             while i < min(ring['size'], MAX_SEEDS_PER_RING):
-                idx = i % len(subnets)
-                s = subnets[idx]
+                idx = i % len(ring_subnets)
+                s = ring_subnets[idx]
                 ip = try_next_address(s['iterator'], s['cidr_block'])
                 if ip not in taken_ips:
                     i += 1
                     ring['seeds'][s['name']].append(ip)
 
-        # forget the iterators
+        # forget the iterators from all region subnets
         for s in subnets:
             del(s['iterator'])
 
@@ -382,12 +385,9 @@ def get_subnet_name(subnet: dict) -> str:
             return tag['Value']
 
 
-def get_region_subnets(prefix_filter: str, region_name: str) -> list:
+def get_region_subnets(region_name: str) -> list:
     ec2 = boto_client('ec2', region_name)
-    resp = ec2.describe_subnets(Filters=[{
-        'Name': 'tag:Name',
-        'Values': ['{}*'.format(prefix_filter)]
-    }])
+    resp = ec2.describe_subnets()
     sorted_subnets = sorted(
         resp['Subnets'],
         key=lambda subnet: subnet['AvailabilityZone']
@@ -397,9 +397,9 @@ def get_region_subnets(prefix_filter: str, region_name: str) -> list:
             for subnet in sorted_subnets]
 
 
-def get_subnets(prefix_filter: str, regions: dict) -> dict:
-    return {name: dict(region, subnets=get_region_subnets(prefix_filter, name))
-            for name, region in regions.items()}
+def get_subnets(regions: dict) -> dict:
+    return {region_name: dict(region, subnets=get_region_subnets(region_name))
+            for region_name, region in regions.items()}
 
 
 def hostname_from_private_ip(region: str, ip: str) -> str:
@@ -765,6 +765,7 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # prepare
+    region_rings = get_subnets(region_rings)
     region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
                         for r in region_rings.keys()}
     region_rings = take_private_ips_for_seeds(region_rings, region_taken_ips)
@@ -801,21 +802,23 @@ def create_cluster(options: dict):
         'sns_topic': options['sns_topic'],
         'sns_email': options['sns_email']
     }
-    rings = {
+    region_rings = {
         region: {
-            'size': options['cluster_size'],
-            'dmz': options['use_dmz'],
-            'dc_suffix': options['dc_suffix'],
-            'num_tokens': options['num_tokens'],
-            'instance_type': options['instance_type'],
-            'volume_type': options['volume_type'],
-            'volume_size': options['volume_size'],
-            'volume_iops': options['volume_iops'],
-            'taupage_ami': None # TODO: let to override
+            'rings': [{
+                'size': options['cluster_size'],
+                'dmz': options['use_dmz'],
+                'dc_suffix': options['dc_suffix'],
+                'num_tokens': options['num_tokens'],
+                'instance_type': options['instance_type'],
+                'volume_type': options['volume_type'],
+                'volume_size': options['volume_size'],
+                'volume_iops': options['volume_iops'],
+                'taupage_ami': None # TODO: let to override
+            }]
         }
         for region in options['regions']
     }
-    return create_rings(cluster, from_region=None, region_to_rings=rings)
+    create_rings(cluster, from_region=None, region_rings=region_rings)
 
 ################################################################################
 # old implementation
@@ -931,21 +934,23 @@ def extend_cluster(options: dict):
         'sns_topic': options['sns_topic'],
         'sns_email': options['sns_email']
     }
-    rings = {
+    region_rings = {
         options['to_region']: {
-            'size': options['ring_size'],
-            'dmz': options['use_dmz'],
-            'dc_suffix': options['dc_suffix'],
-            'num_tokens': options['num_tokens'],
-            'instance_type': options['instance_type'],
-            'volume_type': options['volume_type'],
-            'volume_size': options['volume_size'],
-            'volume_iops': options['volume_iops'],
-            'taupage_ami': None
+            'rings': [{
+                'size': options['ring_size'],
+                'dmz': options['use_dmz'],
+                'dc_suffix': options['dc_suffix'],
+                'num_tokens': options['num_tokens'],
+                'instance_type': options['instance_type'],
+                'volume_type': options['volume_type'],
+                'volume_size': options['volume_size'],
+                'volume_iops': options['volume_iops'],
+                'taupage_ami': None
+            }]
         }
     }
-    return create_rings(
-        cluster, from_region=options['from_region'], region_to_rings=rings
+    create_rings(
+        cluster, from_region=options['from_region'], region_rings=region_rings
     )
 
 ################################################################################
