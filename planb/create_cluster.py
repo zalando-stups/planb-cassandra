@@ -300,8 +300,10 @@ def take_private_ips_for_seeds(
     for region_name, region in region_subnet_ips.items():
         taken_ips = region_taken_ips.get(region_name, set())
         subnets = region['subnets']
+
         for ring in region['rings']:
             ring['seeds'] = {s['name']: [] for s in subnets}
+
             i = 0
             while i < min(ring['size'], MAX_SEEDS_PER_RING):
                 idx = i % len(subnets)
@@ -310,6 +312,8 @@ def take_private_ips_for_seeds(
                 if ip not in taken_ips:
                     i += 1
                     ring['seeds'][s['name']].append(ip)
+
+        # forget the iterators
         for s in subnets:
             del(s['iterator'])
 
