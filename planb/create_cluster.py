@@ -320,7 +320,7 @@ def take_private_ips_for_seeds(
     return region_subnet_ips
 
 
-def list_taken_private_ips(ec2: object) -> list:
+def list_taken_private_ips(ec2: object) -> set:
     #paginator = ec2.get_paginator('describe_instances')
     #resp = paginator.paginate().build_full_result()
     #
@@ -328,7 +328,7 @@ def list_taken_private_ips(ec2: object) -> list:
     # Using MaxResults=1000 sounds like a good enough approximation for now.
     #
     instances = list_instances(ec2, MaxResults=1000)
-    return [i['PrivateIpAddress'] for i in instances]
+    return set([i['PrivateIpAddress'] for i in instances])
 
 
 def xxx(subnets: list, ips_count: int, taken_ips: list) -> list:
@@ -459,7 +459,15 @@ def list_all_seed_node_ips(seed_nodes: dict) -> list:
     ]
 
 
-def create_user_data_template(cluster: dict) -> dict:
+def collect_seed_nodes(region_rings: dict) -> list:
+    return sum([seeds
+                for _, region in region_rings.items()
+                for ring in region['rings']
+                for _, seeds in ring['seeds'].items()],
+               [])
+
+
+def create_user_data_template(cluster: dict, region_rings: dict) -> dict:
     '''
     Generate Taupage user data to start a Cassandra node
     http://docs.stups.io/en/latest/components/taupage.html
@@ -467,8 +475,6 @@ def create_user_data_template(cluster: dict) -> dict:
     keystore_base64 = base64.b64encode(cluster['keystore'])
     truststore_base64 = base64.b64encode(cluster['truststore'])
 
-    # seed nodes across all regions
-    all_seeds = list_all_seed_node_ips(cluster['seed_nodes'])
     data = {
         'runtime': 'Docker',
         'source': cluster['docker_image'],
@@ -481,7 +487,7 @@ def create_user_data_template(cluster: dict) -> dict:
         },
         'environment': {
             'CLUSTER_NAME': cluster['name'],
-            'SEEDS': ','.join(all_seeds),
+            'SEEDS': ','.join(collect_seed_nodes(region_rings)),
             'KEYSTORE': str(keystore_base64, 'UTF-8'),
             'TRUSTSTORE': str(truststore_base64, 'UTF-8'),
             'ADMIN_PASSWORD': cluster['admin_password']
@@ -753,12 +759,12 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
     return get_user_data(ec2, running_instances[0]['InstanceId'])
 
 
-def create_rings(cluster: dict, from_region: str, region_to_rings: dict):
+def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # prepare
-    # * take ip addresses
-    for region, rings in region_to_rings.items():
-        take_private_ip_addresses_for_seed_nodes(subnets, )
-    # * enrich cluster with seeds
+    region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
+                        for r in region_rings.keys()}
+    region_rings = take_private_ips_for_seeds(region_rings, region_taken_ips)
+
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
     else:
