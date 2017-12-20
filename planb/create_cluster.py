@@ -376,26 +376,30 @@ def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
     return seed_nodes
 
 
-def get_subnets(prefix_filter: str, regions: list) -> dict:
-    '''
-    Returns a dict of per-region lists of subnets, which names start
-    with the specified prefix (it should be either 'dmz-' or
-    'internal-'), sorted by the Availability Zone.
-    '''
-    subnets = collections.defaultdict(list)
-    for region in regions:
-        ec2 = boto_client('ec2', region)
-        resp = ec2.describe_subnets()
-        sorted_subnets = sorted(
-            resp['Subnets'],
-            key=lambda subnet: subnet['AvailabilityZone']
-        )
-        for subnet in sorted_subnets:
-            for tag in subnet['Tags']:
-                if tag['Key'] == 'Name':
-                    if tag['Value'].startswith(prefix_filter):
-                        subnets[region].append(subnet)
-    return subnets
+def get_subnet_name(subnet: dict) -> str:
+    for tag in subnet['Tags']:
+        if tag['Key'] == 'Name':
+            return tag['Value']
+
+
+def get_region_subnets(prefix_filter: str, region_name: str) -> list:
+    ec2 = boto_client('ec2', region_name)
+    resp = ec2.describe_subnets(Filters=[{
+        'Name': 'tag:Name',
+        'Values': ['{}*'.format(prefix_filter)]
+    }])
+    sorted_subnets = sorted(
+        resp['Subnets'],
+        key=lambda subnet: subnet['AvailabilityZone']
+    )
+    return [{'name': get_subnet_name(subnet),
+             'cidr_block': subnet['CidrBlock']}
+            for subnet in sorted_subnets]
+
+
+def get_subnets(prefix_filter: str, regions: dict) -> dict:
+    return {name: dict(region, subnets=get_region_subnets(prefix_filter, name))
+            for name, region in regions.items()}
 
 
 def hostname_from_private_ip(region: str, ip: str) -> str:

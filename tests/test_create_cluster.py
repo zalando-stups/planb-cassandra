@@ -2,11 +2,22 @@ import pytest
 import copy
 
 from planb.create_cluster import \
+    get_subnet_name, \
     IpAddressPoolDepletedException, \
     take_private_ips_for_seeds, \
     collect_seed_nodes, \
     create_user_data_template, \
     create_user_data_for_ring
+
+
+def test_get_subnet_name():
+    subnet = {
+        'Tags': [{
+            'Key': 'Name',
+            'Value': 'test-subnet'
+        }]
+    }
+    assert get_subnet_name(subnet) == 'test-subnet'
 
 
 REGION_RINGS = {
