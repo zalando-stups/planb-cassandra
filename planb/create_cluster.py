@@ -272,7 +272,7 @@ def try_next_address(address_iterator: object, cidr_block: str) -> str:
         raise IpAddressPoolDepletedException(cidr_block)
 
 
-def make_network_iterator(cidr_block: str) -> object:
+def get_network_iterator(cidr_block: str) -> object:
     iterator = netaddr.IPNetwork(cidr_block).iter_hosts()
     #
     # Some of the first addresses in each subnet are taken by AWS system
@@ -283,21 +283,19 @@ def make_network_iterator(cidr_block: str) -> object:
     return iterator
 
 
-def subnets_with_iterators(subnets: list) -> list:
-    return [dict(s, iterator=make_network_iterator(s['cidr_block']))
+def get_subnets_with_iterators(subnets: list) -> list:
+    return [dict(s, iterator=get_network_iterator(s['cidr_block']))
             for s in subnets]
 
 
-def take_private_ips_for_seeds(
-        region_rings: dict, region_taken_ips: dict) -> dict:
-
-    region_subnet_ips = {
+def get_ips_for_seeds(region_rings: dict, region_taken_ips: dict) -> dict:
+    region_rings = {
         region_name: dict(region,
-                          subnets=subnets_with_iterators(region['subnets']))
+                          subnets=get_subnets_with_iterators(region['subnets']))
         for region_name, region in region_rings.items()
     }
 
-    for region_name, region in region_subnet_ips.items():
+    for region_name, region in region_rings.items():
         taken_ips = region_taken_ips.get(region_name, set())
         subnets = region['subnets']
 
@@ -320,7 +318,7 @@ def take_private_ips_for_seeds(
         for s in subnets:
             del(s['iterator'])
 
-    return region_subnet_ips
+    return region_rings
 
 
 def list_taken_private_ips(ec2: object) -> set:
@@ -760,21 +758,24 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
         raise click.UsageError(msg)
 
     # TODO: should user be able to specify the clone-from instance?
-    return get_user_data(ec2, running_instances[0]['InstanceId'])
+    instance_id = running_instances[0]['InstanceId']
+    return decode_user_data(fetch_user_data(ec2, instance_id))
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
+    # 1. Go to Orodruin
+
     # prepare
     region_rings = get_subnets(region_rings)
     region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
                         for r in region_rings.keys()}
-    region_rings = take_private_ips_for_seeds(region_rings, region_taken_ips)
+    region_rings = get_ips_for_seeds(region_rings, region_taken_ips)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
     else:
         init_cluster_secuirty_features(cluster)
-        user_data_template = create_user_data_template(cluster)
+        user_data_template = create_user_data_template(cluster, region_rings)
 
     # dostuff
     # * per region

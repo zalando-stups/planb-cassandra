@@ -4,7 +4,7 @@ import copy
 from planb.create_cluster import \
     get_subnet_name, \
     IpAddressPoolDepletedException, \
-    take_private_ips_for_seeds, \
+    get_ips_for_seeds, \
     collect_seed_nodes, \
     create_user_data_template, \
     create_user_data_for_ring
@@ -80,7 +80,7 @@ REGION_RINGS = {
 }
 
 
-def test_take_private_ips_for_seeds():
+def test_take_ips_for_seeds():
     region_taken_ips = {
         'eu-central-1': set(['172.31.8.11']),
         'eu-west-1':    set(['172.31.100.11', '172.31.116.11'])
@@ -105,7 +105,11 @@ def test_take_private_ips_for_seeds():
         'internal-eu-west-1c': ['172.31.116.12']
     }
 
-    assert take_private_ips_for_seeds(REGION_RINGS, region_taken_ips) == expected
+    assert get_ips_for_seeds(REGION_RINGS, region_taken_ips) == expected
+    #
+    # TODO: this is still wrong.  when deploying multi-region we will use
+    # public ips for the seeds!
+    #
     assert set(collect_seed_nodes(expected)) == set([
         '172.31.0.11', '172.31.0.12', '172.31.8.12',
         '10.0.0.11', '10.10.0.11',
@@ -113,7 +117,7 @@ def test_take_private_ips_for_seeds():
     ])
 
     with pytest.raises(IpAddressPoolDepletedException):
-        take_private_ips_for_seeds(
+        get_ips_for_seeds(
             region_rings={
                 'localdc': {
                     'subnets': [
@@ -121,7 +125,7 @@ def test_take_private_ips_for_seeds():
                             'name': 'internal-192-168-1',
                             'cidr_block': '192.168.1.0/30'
                         }
-                    ] ,
+                    ],
                     'rings': [
                         {
                             'size': 10,
@@ -134,7 +138,7 @@ def test_take_private_ips_for_seeds():
         )
 
     # should not raise exceptions
-    take_private_ips_for_seeds(
+    get_ips_for_seeds(
         region_rings={
             'localdc': {
                 'subnets': [
@@ -142,7 +146,7 @@ def test_take_private_ips_for_seeds():
                         'name': 'internal-10-0-0',
                         'cidr_block': '10.0.0.0/27'
                     }
-                ] ,
+                ],
                 'rings': [
                     {
                         'size': 10,
