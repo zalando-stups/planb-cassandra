@@ -250,8 +250,12 @@ def init_cluster_secuirty_features(cluster: dict):
     )
 
 
-def calc_seed_nodes_count(rings: list) -> int:
-    return sum([min(r['size'], MAX_SEEDS_PER_RING) for r in rings])
+# def calc_seed_nodes_count(region_rings: dict) -> dict:
+#     return {
+#         region: [dict(r, seed_count=min(r['size'], MAX_SEEDS_PER_RING))
+#                  for r in rings]
+#         for region, rings in region_rings.items()
+#     }
 
 
 class IpAddressPoolDepletedException(Exception):
@@ -261,41 +265,55 @@ class IpAddressPoolDepletedException(Exception):
         super(IpAddressPoolDepletedException, self).__init__(msg)
 
 
-def generate_private_ip_addresses(
-        subnets: list, cluster_size: int, taken_ips: list):
+def try_next_address(address_iterator: object, cidr_block: str) -> str:
+    try:
+        return str(next(address_iterator))
+    except StopIteration:
+        raise IpAddressPoolDepletedException(cidr_block)
 
-    def try_next_address(ips, subnet):
-        try:
-            return str(next(ips))
-        except StopIteration:
-            raise IpAddressPoolDepletedException(subnet['CidrBlock'])
 
+def make_network_iterator(cidr_block: str) -> object:
+    iterator = netaddr.IPNetwork(cidr_block).iter_hosts()
     #
-    # Here we have to account for the behavior of launch_*_nodes
-    # which iterate through subnets to put the instances into
-    # different Availability Zones.
+    # Some of the first addresses in each subnet are taken by AWS system
+    # instances that we can't see, so we try to skip them.
     #
-    network_ips = [
-        netaddr.IPNetwork(s['CidrBlock']).iter_hosts()
-        for s in subnets
-    ]
-    for idx, ips in enumerate(network_ips):
-        #
-        # Some of the first addresses in each subnet are
-        # taken by AWS system instances that we can't see,
-        # so we try to skip them.
-        #
-        for _ in range(10):
-            try_next_address(ips, subnets[idx])
+    for _ in range(10):
+        try_next_address(iterator, cidr_block)
+    return iterator
 
-    i = 0
-    while i < cluster_size:
-        idx = i % len(subnets)
 
-        ip = try_next_address(network_ips[idx], subnets[idx])
-        if ip not in taken_ips:
-            i += 1
-            yield ip
+def subnets_with_iterators(subnets: list) -> list:
+    return [dict(s, iterator=make_network_iterator(s['cidr_block']))
+            for s in subnets]
+
+
+def take_private_ips_for_seeds(
+        region_rings: dict, region_taken_ips: dict) -> dict:
+
+    region_subnet_ips = {
+        region_name: dict(region,
+                          subnets=subnets_with_iterators(region['subnets']))
+        for region_name, region in region_rings.items()
+    }
+
+    for region_name, region in region_subnet_ips.items():
+        taken_ips = region_taken_ips.get(region_name, set())
+        subnets = region['subnets']
+        for ring in region['rings']:
+            ring['seeds'] = {s['name']: [] for s in subnets}
+            i = 0
+            while i < min(ring['size'], MAX_SEEDS_PER_RING):
+                idx = i % len(subnets)
+                s = subnets[idx]
+                ip = try_next_address(s['iterator'], s['cidr_block'])
+                if ip not in taken_ips:
+                    i += 1
+                    ring['seeds'][s['name']].append(ip)
+        for s in subnets:
+            del(s['iterator'])
+
+    return region_subnet_ips
 
 
 def list_taken_private_ips(ec2: object) -> list:
@@ -734,6 +752,8 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
 def create_rings(cluster: dict, from_region: str, region_to_rings: dict):
     # prepare
     # * take ip addresses
+    for region, rings in region_to_rings.items():
+        take_private_ip_addresses_for_seed_nodes(subnets, )
     # * enrich cluster with seeds
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
