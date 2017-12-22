@@ -258,6 +258,17 @@ def init_cluster_secuirty_features(cluster: dict):
 #     }
 
 
+def seed_iterator(rings: list) -> object:
+    """For a list of rings it returns an iterator over `seed?` predicates."""
+    for ring in rings:
+        for i in range(ring['size']):
+            if i < min(ring['size'], MAX_SEEDS_PER_RING):
+                b = True
+            else:
+                b = False
+            yield b
+
+
 class IpAddressPoolDepletedException(Exception):
 
     def __init__(self, cidr_block: str):
@@ -283,13 +294,65 @@ def get_network_iterator(cidr_block: str) -> object:
     return iterator
 
 
+def get_region_ip_iterator(
+        subnets: list, taken_ips: set, elastic_ips: list, dmz: bool) -> object:
+    """Returns an iterator over IPs from the cycle of subnets.
+       May raise an IpAddressPoolDepletedException."""
+    # We can do this because of the stups naming convention
+    subnet_prefix = 'dmz-' if dmz else 'internal-'
+    nets = [s for s in subnets
+              if s['name'].startswith(subnet_prefix)]
+
+    iterators = {s['name'] : get_network_iterator(s['cidr_block'])
+                 for s in nets}
+    eips = iter(elastic_ips)
+
+    for s in itertools.cycle(nets):
+        while True:
+            ip = try_next_address(iterators[s['name']], s['cidr_block'])
+            if ip not in taken_ips:
+                break
+        address = {'PrivateIp': ip}
+        if dmz:
+            resp = next(eips)
+            address['_defaultIp'] = resp['PublicIp']
+            address['PublicIp'] = resp['PublicIp']
+            address['AllocationId'] = resp['AllocationId']
+        else:
+            address['_defaultIp'] = ip
+        address['subnet'] = s['name']
+        yield address
+
+
+def make_nodes(region: dict) -> list:
+    ipiter = get_region_ip_iterator(
+        region['subnets'], region['taken_ips'],
+        region['elastic_ips'], region['dmz'])
+    nodes = []
+    seeds = seed_iterator(region['rings'])
+    for s, ip in zip(seeds, ipiter):
+        ip.update({'seed?': s})
+        nodes.append(ip)
+
+    return nodes
+
+
+def add_nodes_to_regions(region_rings: dict) -> dict:
+    # iterate over regions and call make_nodes
+    # TODO
+    pass
+
+#TODO remove
 def get_subnets_with_iterators(subnets: list) -> list:
     return [dict(s, iterator=get_network_iterator(s['cidr_block']))
             for s in subnets]
 
 
+
 def get_ips_for_seeds(region_rings: dict, region_taken_ips: dict) -> dict:
+    # get_ip_iterator(subnets, dmz?)  ## simplification: single dmz parameter for create
     region_rings = {
+        # TODO: why iterator per ring?
         region_name: dict(region,
                           subnets=get_subnets_with_iterators(region['subnets']))
         for region_name, region in region_rings.items()
@@ -763,12 +826,14 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
-    # 1. Go to Orodruin
+    # 1. Go to Orodruin TODO?
 
     # prepare
-    region_rings = get_subnets(region_rings)
+    region_rings = get_subnets(region_rings) ## TODO: name sounds odd in this context
+    # TODO: put the taken IPs into the region
     region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
                         for r in region_rings.keys()}
+    # TODO: allocate elastic IPs and put it into region
     region_rings = get_ips_for_seeds(region_rings, region_taken_ips)
 
     if from_region:
@@ -939,7 +1004,7 @@ def extend_cluster(options: dict):
         options['to_region']: {
             'rings': [{
                 'size': options['ring_size'],
-                'dmz': options['use_dmz'],
+                'dmz': options['use_dmz'],  # TODO: currently it seems not supported by our network to have it as attr of ring
                 'dc_suffix': options['dc_suffix'],
                 'num_tokens': options['num_tokens'],
                 'instance_type': options['instance_type'],
