@@ -250,14 +250,6 @@ def init_cluster_secuirty_features(cluster: dict):
     )
 
 
-# def calc_seed_nodes_count(region_rings: dict) -> dict:
-#     return {
-#         region: [dict(r, seed_count=min(r['size'], MAX_SEEDS_PER_RING))
-#                  for r in rings]
-#         for region, rings in region_rings.items()
-#     }
-
-
 def seed_iterator(rings: list) -> object:
     """For a list of rings it returns an iterator over `seed?` predicates."""
     for ring in rings:
@@ -351,6 +343,18 @@ def list_taken_private_ips(ec2: object) -> set:
     #
     instances = list_instances(ec2, MaxResults=1000)
     return set([i['PrivateIpAddress'] for i in instances])
+
+
+#
+# This function doesn't have a test because it creates a boto client itself.
+#
+def add_taken_private_ips(region_rings: dict) -> dict:
+    def add_to_region(region_name: str, region: dict) -> dict:
+        ec2 = boto_client('ec2', region_name)
+        return dict(region, taken_ips=list_taken_private_ips(ec2))
+
+    return {region_name: add_to_region(region_name, region)
+            for region_name, region in region_rings.items()}
 
 
 def add_elastic_ips_to_region(ec2: object, region: dict) -> dict:
@@ -477,11 +481,10 @@ def list_all_seed_node_ips(seed_nodes: dict) -> list:
 
 
 def collect_seed_nodes(region_rings: dict) -> list:
-    return sum([seeds
-                for _, region in region_rings.items()
-                for ring in region['rings']
-                for _, seeds in ring['seeds'].items()],
-               [])
+    return [node['_defaultIp']
+            for _, region in region_rings.items()
+            for node in region['nodes']
+            if node['seed?']]
 
 
 def create_user_data_template(cluster: dict, region_rings: dict) -> dict:
@@ -782,11 +785,9 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
 
     # prepare
     region_rings = get_subnets(region_rings) ## TODO: name sounds odd in this context
-    # TODO: put the taken IPs into the region
-    region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
-                        for r in region_rings.keys()}
+    region_rings = add_taken_private_ips(region_rings)
     region_rings = add_elastic_ips(region_rings)
-    region_rings = get_ips_for_seeds(region_rings, region_taken_ips)
+    region_rings = add_nodes_to_regions(region_rings)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
@@ -799,8 +800,8 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # ** setup or extend SGs
     # ** per ring
     # TODO: consider starting all seed nodes from all rings first, then normal ones
-    for region, rings in region_to_rings.items():
-        for ring in rings:
+    for region_name, region in region_rings.items():
+        for ring in region['rings']:
             user_data = create_user_data_for_ring(user_data_template, ring)
     # *** launch seed nodes
     # *** launch normal nodes

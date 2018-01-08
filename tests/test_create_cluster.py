@@ -27,62 +27,68 @@ def test_get_subnet_name():
     assert get_subnet_name(subnet) == 'test-subnet'
 
 
+EU_CENTRAL = {
+    'dmz': False,
+    'subnets': [
+        {
+            'name': 'dmz-eu-central-1a',
+            'cidr_block': '10.0.0.0/24'
+        },
+        {
+            'name': 'dmz-eu-central-1b',
+            'cidr_block': '10.10.0.0/24'
+        },
+        {
+            'name': 'internal-eu-central-1a',
+            'cidr_block': '172.31.0.0/24'
+        },
+        {
+            'name': 'internal-eu-central-1b',
+            'cidr_block': '172.31.8.0/24'
+        }
+    ],
+    'rings': [
+        {
+            'size': 5,
+        },
+        {
+            'size': 2,
+        }
+    ]
+}
+
+
+EU_WEST = {
+    'dmz': False,
+    'subnets': [
+        {
+            'name': 'dmz-eu-west-1a',
+            'cidr_block': '10.0.0.0/24'
+        },
+        {
+            'name': 'internal-eu-west-1a',
+            'cidr_block': '172.31.100.0/24'
+        },
+        {
+            'name': 'internal-eu-west-1b',
+            'cidr_block': '172.31.108.0/24',
+        },
+        {
+            'name': 'internal-eu-west-1c',
+            'cidr_block': '172.31.116.0/24'
+        }
+    ],
+    'rings': [
+        {
+            'size': 5,
+        }
+    ]
+}
+
+
 REGION_RINGS = {
-    'eu-central-1': {
-        'dmz': False,
-        'subnets': [
-            {
-                'name': 'dmz-eu-central-1a',
-                'cidr_block': '10.0.0.0/24'
-            },
-            {
-                'name': 'dmz-eu-central-1b',
-                'cidr_block': '10.10.0.0/24'
-            },
-            {
-                'name': 'internal-eu-central-1a',
-                'cidr_block': '172.31.0.0/24'
-            },
-            {
-                'name': 'internal-eu-central-1b',
-                'cidr_block': '172.31.8.0/24'
-            }
-        ],
-        'rings': [
-            {
-                'size': 5,
-            },
-            {
-                'size': 2,
-            }
-        ]
-    },
-    'eu-west-1': {
-        'dmz': False,
-        'subnets': [
-            {
-                'name': 'dmz-eu-west-1a',
-                'cidr_block': '10.0.0.0/24'
-            },
-            {
-                'name': 'internal-eu-west-1a',
-                'cidr_block': '172.31.100.0/24'
-            },
-            {
-                'name': 'internal-eu-west-1b',
-                'cidr_block': '172.31.108.0/24',
-            },
-            {
-                'name': 'internal-eu-west-1c',
-                'cidr_block': '172.31.116.0/24'
-            }
-        ],
-        'rings': [
-            {
-                'size': 5,
-            }
-        ]
-    }
+    'eu-central-1': EU_CENTRAL,
+    'eu-west-1': EU_WEST
 }
 
 
@@ -265,6 +271,16 @@ def test_add_nodes_to_regions():
     assert actual == expected
 
 
+def test_collect_seed_nodes():
+    eu_central = copy.deepcopy(EU_CENTRAL)
+    eu_central['nodes'] = expected_central_nodes
+    expected = [
+        '172.31.0.11', '172.31.8.12', '172.31.0.12',
+        '172.31.8.14', '172.31.0.14'
+    ]
+    assert set(collect_seed_nodes({'eu-central-1': eu_central})) == set(expected)
+
+
 def test_create_user_data_template():
     cluster = {
         'name': 'hello-world',
@@ -277,9 +293,10 @@ def test_create_user_data_template():
     }
     region_rings = {
         'eu-central-1': {
-            'rings': [
-                {'seeds': {'subnet-a': ['12.34.56.78']}},
-                {'seeds': {'subnet-b': ['34.56.78.90']}}
+            'nodes': [
+                {'_defaultIp': '12.34.56.78', 'seed?': True},
+                {'_defaultIp': '8.8.8.8', 'seed?': False},
+                {'_defaultIp': '34.56.78.90', 'seed?': True}
             ]
         }
     }
