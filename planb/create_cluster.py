@@ -342,47 +342,6 @@ def add_nodes_to_regions(region_rings: dict) -> dict:
     # TODO
     pass
 
-#TODO remove
-def get_subnets_with_iterators(subnets: list) -> list:
-    return [dict(s, iterator=get_network_iterator(s['cidr_block']))
-            for s in subnets]
-
-
-
-def get_ips_for_seeds(region_rings: dict, region_taken_ips: dict) -> dict:
-    # get_ip_iterator(subnets, dmz?)  ## simplification: single dmz parameter for create
-    region_rings = {
-        # TODO: why iterator per ring?
-        region_name: dict(region,
-                          subnets=get_subnets_with_iterators(region['subnets']))
-        for region_name, region in region_rings.items()
-    }
-
-    for region_name, region in region_rings.items():
-        taken_ips = region_taken_ips.get(region_name, set())
-        subnets = region['subnets']
-
-        for ring in region['rings']:
-            subnet_prefix = 'dmz-' if ring['dmz'] else 'internal-'
-            ring_subnets = [s for s in subnets
-                            if s['name'].startswith(subnet_prefix)]
-            ring['seeds'] = {s['name']: [] for s in ring_subnets}
-
-            i = 0
-            while i < min(ring['size'], MAX_SEEDS_PER_RING):
-                idx = i % len(ring_subnets)
-                s = ring_subnets[idx]
-                ip = try_next_address(s['iterator'], s['cidr_block'])
-                if ip not in taken_ips:
-                    i += 1
-                    ring['seeds'][s['name']].append(ip)
-
-        # forget the iterators from all region subnets
-        for s in subnets:
-            del(s['iterator'])
-
-    return region_rings
-
 
 def list_taken_private_ips(ec2: object) -> set:
     #paginator = ec2.get_paginator('describe_instances')
