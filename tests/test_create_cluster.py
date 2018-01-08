@@ -5,15 +5,16 @@ import copy
 from unittest.mock import MagicMock
 
 from planb.create_cluster import \
-    get_subnet_name, \
     IpAddressPoolDepletedException, \
+    add_elastic_ips_to_region, \
+    add_nodes_to_regions, \
     collect_seed_nodes, \
-    create_user_data_template, \
     create_user_data_for_ring, \
-    seed_iterator, \
+    create_user_data_template, \
     get_region_ip_iterator, \
+    get_subnet_name, \
     make_nodes, \
-    add_nodes_to_regions
+    seed_iterator
 
 
 def test_get_subnet_name():
@@ -158,6 +159,28 @@ def test_address_pool_depletion():
         next(it)
 
 
+def test_region_elastic_ip_allocation():
+    ec2 = MagicMock()
+    elastic_ips = [
+        {'PublicIp': '123.45', 'AllocationId': 'a1'},
+        {'PublicIp': '123.12', 'AllocationId': 'a2'},
+        {'PublicIp': '123.34', 'AllocationId': 'a3'}
+    ]
+    ec2.allocate_address.side_effect = elastic_ips
+    region = {
+        'dmz': True,
+        'rings': [
+            {'size': 1},
+            {'size': 2},
+        ]
+    }
+    expected = copy.deepcopy(region)
+    expected['elastic_ips'] = elastic_ips
+
+    actual = add_elastic_ips_to_region(ec2, region)
+    assert actual == expected
+
+    
 def test_make_nodes_one_ring():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_west = region_rings['eu-west-1']

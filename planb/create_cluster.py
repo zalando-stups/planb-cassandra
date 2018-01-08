@@ -353,36 +353,30 @@ def list_taken_private_ips(ec2: object) -> set:
     return set([i['PrivateIpAddress'] for i in instances])
 
 
-def xxx(subnets: list, ips_count: int, taken_ips: list) -> list:
-    addresses = []
-    for ip in generate_private_ip_addresses(subnets, ips_count, taken_ips):
-        address = {'PrivateIp': ip}
+def add_elastic_ips_to_region(ec2: object, region: dict) -> dict:
+    ips = []
+    for _ in range(sum([r['size'] for r in region['rings']])):
+        resp = ec2.allocate_address(Domain='vpc')
+        ip = {}
+        ip['PublicIp'] = resp['PublicIp']
+        ip['AllocationId'] = resp['AllocationId']
+        ips.append(ip)
+    return dict(region, elastic_ips=ips)
 
-        if take_elastic_ips:
-            resp = ec2.allocate_address(Domain='vpc')
-            address['_defaultIp'] = resp['PublicIp']
-            address['PublicIp'] = resp['PublicIp']
-            address['AllocationId'] = resp['AllocationId']
+
+#
+# This function doesn't have a test because it creates a boto client itself.
+#
+def add_elastic_ips(region_rings: dict) -> dict:
+    def maybe_add_ips(region_name: str, region: dict) -> dict:
+        if region['dmz']:
+            ec2 = boto_client('ec2', region_name)
+            return add_elastic_ips_to_region(ec2, region)
         else:
-            address['_defaultIp'] = ip
-        addresses.append(address)
+            return region
 
-    return addresses
-
-
-def allocate_ip_addresses(
-        region_subnets: dict, cluster_size: int,
-        node_ips: dict, take_elastic_ips: bool):
-    '''
-    Allocate unused private IP addresses by checking the current
-    reservations, and optionally allocate Elastic IPs.
-    '''
-    for region, subnets in region_subnets.items():
-        with Action('Allocating IP addresses in {}..'.format(region)) as act:
-            ec2 = boto_client('ec2', region)
-
-            taken_ips = list_taken_private_ips(ec2)
-            node_ips[region] = xxx(subnets, cluster_size, taken_ips)
+    return {region_name: maybe_add_ips(region_name, region)
+            for region_name, region in region_rings.items()}
 
 
 def pick_seed_node_ips(node_ips: dict, seed_count: int) -> dict:
@@ -791,8 +785,7 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # TODO: put the taken IPs into the region
     region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
                         for r in region_rings.keys()}
-    # TODO: allocate elastic IPs and put it into region
-    #region_rings = add_elastic_ips(region_rings)
+    region_rings = add_elastic_ips(region_rings)
     region_rings = get_ips_for_seeds(region_rings, region_taken_ips)
 
     if from_region:
