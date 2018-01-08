@@ -12,7 +12,8 @@ from planb.create_cluster import \
     create_user_data_for_ring, \
     seed_iterator, \
     get_region_ip_iterator, \
-    make_nodes
+    make_nodes, \
+    add_nodes_to_regions
 
 
 def test_get_subnet_name():
@@ -126,7 +127,7 @@ region_taken_ips = {
 }
 
 
-def test_take_ips_for_seeds():
+def test_address_pool_depletion():
     with pytest.raises(IpAddressPoolDepletedException):
         it = get_region_ip_iterator(
             subnets=[
@@ -224,6 +225,25 @@ def test_get_region_ip_iterator_remove_taken_ip():
     for i in actual:
         for ignore in ignore_keys:
             del i[ignore]
+    assert actual == expected
+
+
+def test_add_nodes_to_regions():
+    region_rings = copy.deepcopy(REGION_RINGS)
+    eu_central = region_rings['eu-central-1']
+    eu_central['taken_ips'] = region_taken_ips['eu-central-1']
+    eu_central['elastic_ips'] = []
+    eu_central['dmz'] = False
+    eu_west = region_rings['eu-west-1']
+    eu_west['taken_ips'] = region_taken_ips['eu-west-1']
+    eu_west['elastic_ips'] = []
+    eu_west['dmz'] = False
+
+    expected = copy.deepcopy(region_rings)
+    expected['eu-central-1']['nodes'] = expected_central_nodes
+    expected['eu-west-1']['nodes'] = expected_west_nodes
+
+    actual = add_nodes_to_regions(region_rings)
     assert actual == expected
 
 

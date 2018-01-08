@@ -338,9 +338,8 @@ def make_nodes(region: dict) -> list:
 
 
 def add_nodes_to_regions(region_rings: dict) -> dict:
-    # iterate over regions and call make_nodes
-    # TODO
-    pass
+    return {region_name: dict(region, nodes=make_nodes(region))
+            for region_name, region in region_rings.items()}
 
 
 def list_taken_private_ips(ec2: object) -> set:
