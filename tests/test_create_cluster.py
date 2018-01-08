@@ -28,6 +28,7 @@ def test_get_subnet_name():
 
 REGION_RINGS = {
     'eu-central-1': {
+        'dmz': False,
         'subnets': [
             {
                 'name': 'dmz-eu-central-1a',
@@ -49,15 +50,14 @@ REGION_RINGS = {
         'rings': [
             {
                 'size': 5,
-                'dmz': False
             },
             {
                 'size': 2,
-                'dmz': True
             }
         ]
     },
     'eu-west-1': {
+        'dmz': False,
         'subnets': [
             {
                 'name': 'dmz-eu-west-1a',
@@ -79,7 +79,6 @@ REGION_RINGS = {
         'rings': [
             {
                 'size': 5,
-                'dmz': False
             }
         ]
     }
@@ -164,7 +163,6 @@ def test_make_nodes_one_ring():
     eu_west = region_rings['eu-west-1']
     eu_west['taken_ips'] = region_taken_ips['eu-west-1']
     eu_west['elastic_ips'] = []
-    eu_west['dmz'] = False
     actual = make_nodes(eu_west)
     assert actual == expected_west_nodes
 
@@ -174,7 +172,6 @@ def test_make_nodes_two_rings():
     eu_central = region_rings['eu-central-1']
     eu_central['taken_ips'] = region_taken_ips['eu-central-1']
     eu_central['elastic_ips'] = []
-    eu_central['dmz'] = False
     actual = make_nodes(eu_central)
     assert actual == expected_central_nodes
 
@@ -233,11 +230,9 @@ def test_add_nodes_to_regions():
     eu_central = region_rings['eu-central-1']
     eu_central['taken_ips'] = region_taken_ips['eu-central-1']
     eu_central['elastic_ips'] = []
-    eu_central['dmz'] = False
     eu_west = region_rings['eu-west-1']
     eu_west['taken_ips'] = region_taken_ips['eu-west-1']
     eu_west['elastic_ips'] = []
-    eu_west['dmz'] = False
 
     expected = copy.deepcopy(region_rings)
     expected['eu-central-1']['nodes'] = expected_central_nodes
@@ -307,7 +302,6 @@ def test_create_user_data_for_ring():
         }
     }
     ring = {
-        'dmz': False,
         'num_tokens': 1,
         'environment': {
             'EXTRA1': 'value1'
@@ -322,4 +316,4 @@ def test_create_user_data_for_ring():
             'EXTRA1': 'value1'
         }
     }
-    assert create_user_data_for_ring(template, ring) == expected
+    assert create_user_data_for_ring(template, ring, dmz=False) == expected

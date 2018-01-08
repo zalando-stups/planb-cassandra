@@ -534,12 +534,12 @@ def create_user_data_template(cluster: dict, region_rings: dict) -> dict:
     return data
 
 
-def create_user_data_for_ring(template: dict, ring: dict) -> dict:
+def create_user_data_for_ring(template: dict, ring: dict, dmz: bool) -> dict:
     data = copy.deepcopy(template)
 
     env = data['environment']
     env['NUM_TOKENS'] = ring['num_tokens']
-    env['SUBNET_TYPE'] = 'dmz' if ring['dmz'] else 'internal'
+    env['SUBNET_TYPE'] = 'dmz' if dmz else 'internal'
 
     if ring.get('environment'):
         data['environment'].update(ring['environment'])
@@ -792,6 +792,7 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
     region_taken_ips = {r: list_taken_private_ips(boto_client('ec2', region_name=r))
                         for r in region_rings.keys()}
     # TODO: allocate elastic IPs and put it into region
+    #region_rings = add_elastic_ips(region_rings)
     region_rings = get_ips_for_seeds(region_rings, region_taken_ips)
 
     if from_region:
@@ -817,6 +818,7 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
 def create_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
+        'dmz': options['use_dmz'],
         'protect_from_termination': not(options['no_termination_protection']),
         'hosted_zone': options['hosted_zone'],
         'scalyr_region': options['scalyr_region'],
@@ -830,7 +832,6 @@ def create_cluster(options: dict):
         region: {
             'rings': [{
                 'size': options['cluster_size'],
-                'dmz': options['use_dmz'],
                 'dc_suffix': options['dc_suffix'],
                 'num_tokens': options['num_tokens'],
                 'instance_type': options['instance_type'],
@@ -949,6 +950,7 @@ def create_cluster(options: dict):
 def extend_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
+        'dmz': options['use_dmz'],
         'protect_from_termination': not(options['no_termination_protection']),
         'hosted_zone': options['hosted_zone'],
         'scalyr_region': options['scalyr_region'],
@@ -962,7 +964,6 @@ def extend_cluster(options: dict):
         options['to_region']: {
             'rings': [{
                 'size': options['ring_size'],
-                'dmz': options['use_dmz'],  # TODO: currently it seems not supported by our network to have it as attr of ring
                 'dc_suffix': options['dc_suffix'],
                 'num_tokens': options['num_tokens'],
                 'instance_type': options['instance_type'],
