@@ -36,6 +36,22 @@ def find_security_group_by_name(ec2: object, sg_name: str) -> dict:
     return resp['SecurityGroups'][0]
 
 
+def make_ingress_rules(nodes: list) -> list:
+    return [
+        {
+            'IpProtocol': 'tcp',
+            'FromPort': 7001,
+            'ToPort':   7001,
+            'IpRanges': [
+                {
+                    'CidrIp': '{}/32'.format(node['PublicIp'])
+                }
+            ]
+        }
+        for node in nodes
+    ]
+
+
 def create_security_group(
         cluster: dict, region_name: str, region: dict, all_nodes: list) -> dict:
     description = 'Allow Cassandra nodes to talk to each other on port 7001'
@@ -55,21 +71,13 @@ def create_security_group(
         Resources=[sg['GroupId']],
         Tags=[{'Key': 'Name', 'Value': sg_name}]
     )
-    ip_permissions = []
+
     if region['dmz']:
         # NOTE: we need to allow ALL public IPs (from all regions)
-        for ip in all_nodes:
-            ingress_rule = {
-                'IpProtocol': 'tcp',
-                'FromPort': 7001,  # port range: From-To
-                'ToPort':   7001,
-                'IpRanges': [
-                    {
-                        'CidrIp': '{}/32'.format(ip['PublicIp'])
-                    }
-                ]
-            }
-            ip_permissions.append(ingress_rule)
+        ip_permissions = make_ingress_rules(all_nodes)
+    else:
+        ip_permissions = []
+
     # if internal subnets are used we just allow access from
     # within the SG, which we also need in multi-region setup
     # (for the nodetool?)
@@ -85,29 +93,6 @@ def create_security_group(
     )
 
     return sg['GroupId']
-
-
-def extend_security_group(region: str, sg: dict, other_region_ips: list):
-    with Action('Updating Security Group in {}..'.format(region)):
-        ip_permissions = [
-            {
-                'IpProtocol': 'tcp',
-                'FromPort': 7001,  # port range: From-To
-                'ToPort':   7001,
-                'IpRanges': [
-                    {
-                        'CidrIp': '{}/32'.format(ip['PublicIp'])
-                    }
-                ]
-            }
-            for ip in other_region_ips
-        ]
-
-        ec2 = aws.boto_client('ec2', region)
-        ec2.authorize_security_group_ingress(
-            GroupId=sg['GroupId'],
-            IpPermissions=ip_permissions
-        )
 
 
 def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
@@ -139,6 +124,19 @@ def add_security_groups(
         cluster: dict, from_region: str, region_rings: dict) -> dict:
 
     all_nodes = sum([region['nodes'] for _, region in region_rings.items()], [])
+
+    if from_region:
+        ec2 = aws.boto_client('ec2', from_region)
+        sg = find_security_group_by_name(ec2, cluster['name'])
+
+        from_region_nodes = get_public_ips_from_sg(sg)
+        ec2.authorize_security_group_ingress(
+            GroupId=sg['GroupId'],
+            IpPermissions=make_ingress_rules(all_nodes)
+        )
+
+        all_nodes.extend(from_region_nodes)
+
     create_sg = lambda region_name, region: \
         dict(region, security_group_id=create_security_group(
                          cluster, region_name, region, all_nodes))

@@ -17,6 +17,7 @@ from planb.create_cluster import \
     create_user_data_template, \
     get_region_ip_iterator, \
     get_subnet_name, \
+    make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
     seed_iterator
@@ -141,7 +142,22 @@ def ec2_sg_fixture(monkeypatch):
         ]
     }
     ec2['eu-central-1'].describe_security_groups.return_value = {
-        'SecurityGroups': []
+        'SecurityGroups': [
+            {
+                'GroupId': 'sg-central-1',
+                'IpPermissions': [
+                    {
+                        'IpProtocol': 'tcp',
+                        'FromPort': 7001,
+                        'ToPort': 7001,
+                        'IpRanges': [
+                            {'CidrIp': '12.34/32'},
+                            {'CidrIp': '56.78/32'}
+                        ]
+                    }
+                ]
+            }
+        ]
     }
     ec2['eu-west-1'].describe_security_groups.return_value = {
         'SecurityGroups': []
@@ -642,12 +658,10 @@ def test_create_security_groups_dmz(ec2_sg_fixture):
     region_rings = {
         'eu-central-1': {
             'dmz': True,
-            'rings': {'size': 2},
             'nodes': PUBLIC_CENTRAL_NODES
         },
         'eu-west-1': {
             'dmz': True,
-            'rings': {'size': 3},
             'nodes': PUBLIC_WEST_NODES
         }
     }
@@ -660,19 +674,7 @@ def test_create_security_groups_dmz(ec2_sg_fixture):
     ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
 
     # TODO: order is not defined
-    all_rules = [
-        {
-            'IpProtocol': 'tcp',
-            'FromPort': 7001,
-            'ToPort':   7001,
-            'IpRanges': [
-                {
-                    'CidrIp': '{}/32'.format(node['PublicIp'])
-                }
-            ]
-        }
-        for node in (PUBLIC_CENTRAL_NODES + PUBLIC_WEST_NODES)
-    ]
+    all_rules = make_ingress_rules(PUBLIC_CENTRAL_NODES + PUBLIC_WEST_NODES)
 
     actual = add_security_groups(cluster, None, region_rings)
     assert actual == expected
@@ -700,4 +702,40 @@ def test_create_security_groups_dmz(ec2_sg_fixture):
 
 
 def test_extend_security_groups(ec2_sg_fixture):
-    assert False
+    cluster = {'name': 'test-cluster'}
+    from_region = 'eu-central-1'
+    region_rings = {
+        'eu-west-1': {
+            'dmz': True,
+            'nodes': PUBLIC_WEST_NODES
+        }
+    }
+
+    expected = copy.deepcopy(region_rings)
+    expected['eu-west-1']['security_group_id'] = 'sg-west-1'
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress.return_value = None
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
+
+    central_rules = make_ingress_rules(PUBLIC_CENTRAL_NODES)
+    west_rules = make_ingress_rules(PUBLIC_WEST_NODES)
+
+    actual = add_security_groups(cluster, from_region, region_rings)
+    assert actual == expected
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-central-1',
+            IpPermissions=west_rules
+        )
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-west-1',
+            # TODO: order matters!
+            IpPermissions=(west_rules + central_rules + [
+                {
+                    'IpProtocol': '-1',
+                    'UserIdGroupPairs': [{'GroupId': 'sg-west-1'}]
+                }
+            ])
+        )
