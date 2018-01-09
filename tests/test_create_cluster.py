@@ -9,6 +9,7 @@ from planb.create_cluster import \
     add_elastic_ips, \
     add_elastic_ips_to_region, \
     add_nodes_to_regions, \
+    add_subnets, \
     add_taken_private_ips, \
     collect_seed_nodes, \
     create_user_data_for_ring, \
@@ -19,16 +20,58 @@ from planb.create_cluster import \
     seed_iterator
 
 
-EC2_CENTRAL_EIPS = [
+BOTO_CENTRAL_EIPS = [
     {'PublicIp': '12.34', 'AllocationId': 'a1'},
     {'PublicIp': '56.78', 'AllocationId': 'a2'}
 ]
 
+BOTO_CENTRAL_SUBNETS = [
+    {
+        'AvailabilityZone': 'eu-central-1a',
+        'CidrBlock': '10.0.0.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'dmz-eu-central-1a'}]
+    },
+    {
+        'AvailabilityZone': 'eu-central-1b',
+        'CidrBlock': '10.10.0.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'dmz-eu-central-1b'}]
+    },
+    {
+        'AvailabilityZone': 'eu-central-1a',
+        'CidrBlock': '172.31.0.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'internal-eu-central-1a'}]
+    },
+    {
+        'AvailabilityZone': 'eu-central-1b',
+        'CidrBlock': '172.31.8.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'internal-eu-central-1b'}]
+    }
+]
 
-EC2_WEST_EIPS = [
+
+BOTO_WEST_EIPS = [
     {'PublicIp': '34.12', 'AllocationId': 'b1'},
     {'PublicIp': '78.56', 'AllocationId': 'b2'},
     {'PublicIp': '90.12', 'AllocationId': 'b3'}
+]
+
+
+BOTO_WEST_SUBNETS = [
+    {
+        'AvailabilityZone': 'eu-west-1a',
+        'CidrBlock': '172.31.100.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'internal-eu-west-1a'}]
+    },
+    {
+        'AvailabilityZone': 'eu-west-1b',
+        'CidrBlock': '172.31.108.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'internal-eu-west-1b'}]
+    },
+    {
+        'AvailabilityZone': 'eu-west-1c',
+        'CidrBlock': '172.31.116.0/24',
+        'Tags': [{'Key': 'Name', 'Value': 'internal-eu-west-1c'}]
+    }
 ]
 
 
@@ -45,7 +88,10 @@ def ec2_fixture(monkeypatch):
             }
         ]
     }
-    ec2_central.allocate_address.side_effect = EC2_CENTRAL_EIPS
+    ec2_central.allocate_address.side_effect = BOTO_CENTRAL_EIPS
+    ec2_central.describe_subnets.return_value = {
+        'Subnets': BOTO_CENTRAL_SUBNETS
+    }
     ec2_west = MagicMock()
     ec2_west.describe_instances.return_value = {
         'Reservations': [
@@ -57,7 +103,10 @@ def ec2_fixture(monkeypatch):
             }
         ]
     }
-    ec2_west.allocate_address.side_effect = EC2_WEST_EIPS
+    ec2_west.allocate_address.side_effect = BOTO_WEST_EIPS
+    ec2_west.describe_subnets.return_value = {
+        'Subnets': BOTO_WEST_SUBNETS
+    }
     ec2 = {
         'eu-central-1': ec2_central,
         'eu-west-1': ec2_west
@@ -77,26 +126,27 @@ def test_get_subnet_name():
     assert get_subnet_name(subnet) == 'test-subnet'
 
 
+EU_CENTRAL_SUBNETS = [
+    {
+        'name': 'dmz-eu-central-1a',
+        'cidr_block': '10.0.0.0/24'
+    },
+    {
+        'name': 'internal-eu-central-1a',
+        'cidr_block': '172.31.0.0/24'
+    },
+    {
+        'name': 'dmz-eu-central-1b',
+        'cidr_block': '10.10.0.0/24'
+    },
+    {
+        'name': 'internal-eu-central-1b',
+        'cidr_block': '172.31.8.0/24'
+    }
+]
+
 EU_CENTRAL = {
     'dmz': False,
-    'subnets': [
-        {
-            'name': 'dmz-eu-central-1a',
-            'cidr_block': '10.0.0.0/24'
-        },
-        {
-            'name': 'dmz-eu-central-1b',
-            'cidr_block': '10.10.0.0/24'
-        },
-        {
-            'name': 'internal-eu-central-1a',
-            'cidr_block': '172.31.0.0/24'
-        },
-        {
-            'name': 'internal-eu-central-1b',
-            'cidr_block': '172.31.8.0/24'
-        }
-    ],
     'rings': [
         {
             'size': 5,
@@ -108,26 +158,29 @@ EU_CENTRAL = {
 }
 
 
+EU_WEST_SUBNETS = [
+    # TODO
+    # {
+    #     'name': 'dmz-eu-west-1a',
+    #     'cidr_block': '10.0.0.0/24'
+    # },
+    {
+        'name': 'internal-eu-west-1a',
+        'cidr_block': '172.31.100.0/24'
+    },
+    {
+        'name': 'internal-eu-west-1b',
+        'cidr_block': '172.31.108.0/24',
+    },
+    {
+        'name': 'internal-eu-west-1c',
+        'cidr_block': '172.31.116.0/24'
+    }
+]
+
+
 EU_WEST = {
     'dmz': False,
-    'subnets': [
-        {
-            'name': 'dmz-eu-west-1a',
-            'cidr_block': '10.0.0.0/24'
-        },
-        {
-            'name': 'internal-eu-west-1a',
-            'cidr_block': '172.31.100.0/24'
-        },
-        {
-            'name': 'internal-eu-west-1b',
-            'cidr_block': '172.31.108.0/24',
-        },
-        {
-            'name': 'internal-eu-west-1c',
-            'cidr_block': '172.31.116.0/24'
-        }
-    ],
     'rings': [
         {
             'size': 5,
@@ -253,8 +306,8 @@ def test_add_elastic_ips(ec2_fixture):
         }
     }
     expected = copy.deepcopy(region_rings)
-    expected['eu-central-1']['elastic_ips'] = EC2_CENTRAL_EIPS
-    expected['eu-west-1']['elastic_ips'] = EC2_WEST_EIPS
+    expected['eu-central-1']['elastic_ips'] = BOTO_CENTRAL_EIPS
+    expected['eu-west-1']['elastic_ips'] = BOTO_WEST_EIPS
     actual = add_elastic_ips(region_rings)
     assert actual == expected
 
@@ -262,6 +315,7 @@ def test_add_elastic_ips(ec2_fixture):
 def test_make_nodes_one_ring():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_west = region_rings['eu-west-1']
+    eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = region_taken_ips['eu-west-1']
     eu_west['elastic_ips'] = []
     actual = make_nodes(eu_west)
@@ -271,6 +325,7 @@ def test_make_nodes_one_ring():
 def test_make_nodes_two_rings():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
+    eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = region_taken_ips['eu-central-1']
     eu_central['elastic_ips'] = []
     actual = make_nodes(eu_central)
@@ -289,7 +344,7 @@ def test_get_region_ip_iterator_elastic_ips():
          {'PublicIp': '51.3', 'AllocationId': 'a4'},
          {'PublicIp': '51.5', 'AllocationId': 'a6'},
          {'PublicIp': '51.7', 'AllocationId': 'a8'}]
-    subnets = REGION_RINGS['eu-central-1']['subnets']
+    subnets = EU_CENTRAL_SUBNETS
     taken_ips = region_taken_ips['eu-central-1']
     ipiter = get_region_ip_iterator(subnets, taken_ips, elastic_ips, True)
     actual = [next(ipiter) for i in range(4)]
@@ -308,7 +363,7 @@ def test_get_region_ip_iterator_elastic_ips():
 
 
 def test_get_region_ip_iterator_remove_taken_ip():
-    subnets = REGION_RINGS['eu-central-1']['subnets']
+    subnets = EU_CENTRAL_SUBNETS
     taken_ips = region_taken_ips['eu-central-1']
     ipiter = get_region_ip_iterator(subnets, taken_ips, [], False)
     actual = [next(ipiter) for i in range(4)]
@@ -329,9 +384,11 @@ def test_get_region_ip_iterator_remove_taken_ip():
 def test_add_nodes_to_regions():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
+    eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = region_taken_ips['eu-central-1']
     eu_central['elastic_ips'] = []
     eu_west = region_rings['eu-west-1']
+    eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = region_taken_ips['eu-west-1']
     eu_west['elastic_ips'] = []
 
@@ -430,19 +487,6 @@ def test_create_user_data_for_ring():
     }
     assert create_user_data_for_ring(template, ring, dmz=False) == expected
 
-# def test_prepare_rings():
-#     ec2 = MagicMock()
-#     ec2.allocate_address.side_effect = elastic_ips
-
-#     actual = prepare_rings(fn, )
-
-
-# # def create_rings(factory_fn: object, cluster: dict, region: dict):
-
-# def test_create_rings():
-
-#     create_rings(boto_client_factory)
-
 
 def test_add_taken_private_ips(ec2_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
@@ -451,3 +495,24 @@ def test_add_taken_private_ips(ec2_fixture):
     expected['eu-west-1']['taken_ips'] = set(['10.1.0.1', '10.1.8.10'])
     actual = add_taken_private_ips(region_rings)
     assert actual == expected
+
+
+def test_add_subnets(ec2_fixture):
+    region_rings = copy.deepcopy(REGION_RINGS)
+    expected = copy.deepcopy(REGION_RINGS)
+    expected['eu-central-1']['subnets'] = EU_CENTRAL_SUBNETS
+    expected['eu-west-1']['subnets'] = EU_WEST_SUBNETS
+    actual = add_subnets(region_rings)
+    assert actual == expected
+    
+
+# def test_prepare_rings(ec2_fixture):
+#     region_rings = ...
+#     expected = ..
+#     actual = prepare_rings(region_rings)
+#     assert actual == expected
+
+
+#def test_create_rings(ec2_fixture):
+
+#     create_rings(boto_client_factory)

@@ -402,14 +402,14 @@ def get_region_subnets(region_name: str) -> list:
     resp = ec2.describe_subnets()
     sorted_subnets = sorted(
         resp['Subnets'],
-        key=lambda subnet: subnet['AvailabilityZone']
+        key=lambda subnet: (subnet['AvailabilityZone'], subnet['CidrBlock'])
     )
     return [{'name': get_subnet_name(subnet),
              'cidr_block': subnet['CidrBlock']}
             for subnet in sorted_subnets]
 
 
-def get_subnets(regions: dict) -> dict:
+def add_subnets(regions: dict) -> dict:
     return {region_name: dict(region, subnets=get_region_subnets(region_name))
             for region_name, region in regions.items()}
 
@@ -775,18 +775,18 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
     return decode_user_data(fetch_user_data(ec2, instance_id))
 
 
-def prepare_rings(aws_fn: object, region_rings: dict) -> dict:
-    pass
+def prepare_rings(region_rings: dict) -> dict:
+    region_rings = add_subnets(region_rings)
+    region_rings = add_taken_private_ips(region_rings)
+    region_rings = add_elastic_ips(region_rings)
+    region_rings = add_nodes_to_regions(region_rings)
+    return region_rings
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # 1. Go to Orodruin TODO?
 
-    # prepare
-    region_rings = get_subnets(region_rings) ## TODO: name sounds odd in this context
-    region_rings = add_taken_private_ips(region_rings)
-    region_rings = add_elastic_ips(region_rings)
-    region_rings = add_nodes_to_regions(region_rings)
+    region_rings = prepare_rings(region_rings)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
