@@ -195,7 +195,7 @@ REGION_RINGS = {
 }
 
 
-expected_central_nodes = [
+EXPECTED_CENTRAL_NODES = [
     # 'PublicIP': None, 'AllocationId': None,
     # 1st ring
     {'_defaultIp': '172.31.0.11', 'PrivateIp': '172.31.0.11',
@@ -216,7 +216,7 @@ expected_central_nodes = [
 ]
 
 
-expected_west_nodes = [
+EXPECTED_WEST_NODES = [
     {'_defaultIp': '172.31.100.12', 'PrivateIp': '172.31.100.12',
         'subnet': 'internal-eu-west-1a', 'seed?': True},
     {'_defaultIp': '172.31.108.11', 'PrivateIp': '172.31.108.11',
@@ -230,10 +230,8 @@ expected_west_nodes = [
 ]
 
 
-region_taken_ips = {
-    'eu-central-1': set(['172.31.8.11']),
-    'eu-west-1':    set(['172.31.100.11', '172.31.116.11'])
-}
+TAKEN_CENTRAL_IPS = set(['172.31.8.11'])
+TAKEN_WEST_IPS = set(['172.31.100.11', '172.31.116.11'])
 
 
 def test_address_pool_depletion():
@@ -316,18 +314,18 @@ def test_make_nodes_one_ring():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
-    eu_west['taken_ips'] = region_taken_ips['eu-west-1']
+    eu_west['taken_ips'] = TAKEN_WEST_IPS
     actual = make_nodes(eu_west)
-    assert actual == expected_west_nodes
+    assert actual == EXPECTED_WEST_NODES
 
 
 def test_make_nodes_two_rings():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
-    eu_central['taken_ips'] = region_taken_ips['eu-central-1']
+    eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
     actual = make_nodes(eu_central)
-    assert actual == expected_central_nodes
+    assert actual == EXPECTED_CENTRAL_NODES
 
 
 def test_seed_iterator():
@@ -343,7 +341,7 @@ def test_get_region_ip_iterator_elastic_ips():
          {'PublicIp': '51.5', 'AllocationId': 'a6'},
          {'PublicIp': '51.7', 'AllocationId': 'a8'}]
     subnets = EU_CENTRAL_SUBNETS
-    taken_ips = region_taken_ips['eu-central-1']
+    taken_ips = TAKEN_CENTRAL_IPS
     ipiter = get_region_ip_iterator(subnets, taken_ips, elastic_ips, True)
     actual = [next(ipiter) for i in range(4)]
 
@@ -362,7 +360,7 @@ def test_get_region_ip_iterator_elastic_ips():
 
 def test_get_region_ip_iterator_remove_taken_ip():
     subnets = EU_CENTRAL_SUBNETS
-    taken_ips = region_taken_ips['eu-central-1']
+    taken_ips = TAKEN_CENTRAL_IPS
     ipiter = get_region_ip_iterator(subnets, taken_ips, [], False)
     actual = [next(ipiter) for i in range(4)]
 
@@ -383,16 +381,16 @@ def test_add_nodes_to_regions():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
-    eu_central['taken_ips'] = region_taken_ips['eu-central-1']
+    eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
     eu_central['elastic_ips'] = []
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
-    eu_west['taken_ips'] = region_taken_ips['eu-west-1']
+    eu_west['taken_ips'] = TAKEN_WEST_IPS
     eu_west['elastic_ips'] = []
 
     expected = copy.deepcopy(region_rings)
-    expected['eu-central-1']['nodes'] = expected_central_nodes
-    expected['eu-west-1']['nodes'] = expected_west_nodes
+    expected['eu-central-1']['nodes'] = EXPECTED_CENTRAL_NODES
+    expected['eu-west-1']['nodes'] = EXPECTED_WEST_NODES
 
     actual = add_nodes_to_regions(region_rings)
     assert actual == expected
@@ -400,7 +398,7 @@ def test_add_nodes_to_regions():
 
 def test_collect_seed_nodes():
     eu_central = copy.deepcopy(EU_CENTRAL)
-    eu_central['nodes'] = expected_central_nodes
+    eu_central['nodes'] = EXPECTED_CENTRAL_NODES
     expected = [
         '172.31.0.11', '172.31.8.12', '172.31.0.12',
         '172.31.8.14', '172.31.0.14'
@@ -489,8 +487,8 @@ def test_create_user_data_for_ring():
 def test_add_taken_private_ips(ec2_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
     expected = copy.deepcopy(REGION_RINGS)
-    expected['eu-central-1']['taken_ips'] = region_taken_ips['eu-central-1']
-    expected['eu-west-1']['taken_ips'] = region_taken_ips['eu-west-1']
+    expected['eu-central-1']['taken_ips'] = TAKEN_CENTRAL_IPS
+    expected['eu-west-1']['taken_ips'] = TAKEN_WEST_IPS
     actual = add_taken_private_ips(region_rings)
     assert actual == expected
 
@@ -509,12 +507,12 @@ def test_prepare_rings(ec2_fixture):
     expected = copy.deepcopy(REGION_RINGS)
     expected['eu-central-1'].update(
         subnets=EU_CENTRAL_SUBNETS,
-        taken_ips=region_taken_ips['eu-central-1'],
-        nodes=expected_central_nodes)
+        taken_ips=TAKEN_CENTRAL_IPS,
+        nodes=EXPECTED_CENTRAL_NODES)
     expected['eu-west-1'].update(
         subnets=EU_WEST_SUBNETS,
-        taken_ips=region_taken_ips['eu-west-1'],
-        nodes=expected_west_nodes)
+        taken_ips=TAKEN_WEST_IPS,
+        nodes=EXPECTED_WEST_NODES)
     actual = prepare_rings(region_rings)
     assert actual == expected
 
