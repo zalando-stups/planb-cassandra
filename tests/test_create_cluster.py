@@ -27,6 +27,7 @@ BOTO_CENTRAL_EIPS = [
     {'PublicIp': '56.78', 'AllocationId': 'a2'}
 ]
 
+
 BOTO_CENTRAL_SUBNETS = [
     {
         'AvailabilityZone': 'eu-central-1a',
@@ -236,7 +237,7 @@ REGION_RINGS = {
 }
 
 
-EXPECTED_CENTRAL_NODES = [
+PRIVATE_CENTRAL_NODES = [
     # 'PublicIP': None, 'AllocationId': None,
     # 1st ring
     {'_defaultIp': '172.31.0.11', 'PrivateIp': '172.31.0.11',
@@ -253,21 +254,59 @@ EXPECTED_CENTRAL_NODES = [
     {'_defaultIp': '172.31.8.14', 'PrivateIp': '172.31.8.14',
      'subnet': 'internal-eu-central-1b', 'seed?': True},
     {'_defaultIp': '172.31.0.14', 'PrivateIp': '172.31.0.14',
-     'subnet': 'internal-eu-central-1a', 'seed?': True},
+     'subnet': 'internal-eu-central-1a', 'seed?': True}
 ]
 
 
-EXPECTED_WEST_NODES = [
+PUBLIC_CENTRAL_NODES = [
+    {'_defaultIp': '12.34',
+     'PrivateIp': '172.31.8.14',
+     'PublicIp': '12.34',
+     'AllocationId': 'a1',
+     'subnet': 'internal-eu-central-1b',
+     'seed?': True},
+    {'_defaultIp': '56.78',
+     'PrivateIp': '172.31.0.14',
+     'PublicIp': '56.78',
+     'AllocationId': 'a2',
+     'subnet': 'internal-eu-central-1a',
+     'seed?': True}
+]
+
+
+PRIVATE_WEST_NODES = [
     {'_defaultIp': '172.31.100.12', 'PrivateIp': '172.31.100.12',
-        'subnet': 'internal-eu-west-1a', 'seed?': True},
+     'subnet': 'internal-eu-west-1a', 'seed?': True},
     {'_defaultIp': '172.31.108.11', 'PrivateIp': '172.31.108.11',
-        'subnet': 'internal-eu-west-1b', 'seed?': True},
+     'subnet': 'internal-eu-west-1b', 'seed?': True},
     {'_defaultIp': '172.31.116.12',  'PrivateIp': '172.31.116.12',
-        'subnet': 'internal-eu-west-1c', 'seed?': True},
+     'subnet': 'internal-eu-west-1c', 'seed?': True},
     {'_defaultIp': '172.31.100.13',  'PrivateIp': '172.31.100.13',
-        'subnet': 'internal-eu-west-1a', 'seed?': False},
+     'subnet': 'internal-eu-west-1a', 'seed?': False},
     {'_defaultIp': '172.31.108.12', 'PrivateIp': '172.31.108.12',
-        'subnet': 'internal-eu-west-1b', 'seed?': False},
+     'subnet': 'internal-eu-west-1b', 'seed?': False}
+]
+
+
+PUBLIC_WEST_NODES = [
+    {'_defaultIp': '24.12',
+     'PrivateIp': '172.31.100.12',
+     'PublicIp': '34.12',
+     'AllocationId': 'b1',
+     'subnet': 'internal-eu-west-1a',
+     'seed?': True},
+    {'_defaultIp': '78.56',
+     'PrivateIp': '172.31.108.11',
+     'PublicIp': '78.56',
+     'AllocationId': 'b2',
+     'subnet': 'internal-eu-west-1b',
+     'seed?': True},
+    {'_defaultIp': '90.12',
+     'PrivateIp': '172.31.116.12',
+     'PublicIp': '90.12',
+     'AllocationId': 'b3',
+     'subnet': 'internal-eu-west-1c',
+     'seed?': True},
 ]
 
 
@@ -357,7 +396,7 @@ def test_make_nodes_one_ring():
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
     actual = make_nodes(eu_west)
-    assert actual == EXPECTED_WEST_NODES
+    assert actual == PRIVATE_WEST_NODES
 
 
 def test_make_nodes_two_rings():
@@ -366,7 +405,7 @@ def test_make_nodes_two_rings():
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
     actual = make_nodes(eu_central)
-    assert actual == EXPECTED_CENTRAL_NODES
+    assert actual == PRIVATE_CENTRAL_NODES
 
 
 def test_seed_iterator():
@@ -430,8 +469,8 @@ def test_add_nodes_to_regions():
     eu_west['elastic_ips'] = []
 
     expected = copy.deepcopy(region_rings)
-    expected['eu-central-1']['nodes'] = EXPECTED_CENTRAL_NODES
-    expected['eu-west-1']['nodes'] = EXPECTED_WEST_NODES
+    expected['eu-central-1']['nodes'] = PRIVATE_CENTRAL_NODES
+    expected['eu-west-1']['nodes'] = PRIVATE_WEST_NODES
 
     actual = add_nodes_to_regions(region_rings)
     assert actual == expected
@@ -439,7 +478,7 @@ def test_add_nodes_to_regions():
 
 def test_collect_seed_nodes():
     eu_central = copy.deepcopy(EU_CENTRAL)
-    eu_central['nodes'] = EXPECTED_CENTRAL_NODES
+    eu_central['nodes'] = PRIVATE_CENTRAL_NODES
     expected = [
         '172.31.0.11', '172.31.8.12', '172.31.0.12',
         '172.31.8.14', '172.31.0.14'
@@ -549,11 +588,11 @@ def test_prepare_rings(ec2_fixture):
     expected['eu-central-1'].update(
         subnets=EU_CENTRAL_SUBNETS,
         taken_ips=TAKEN_CENTRAL_IPS,
-        nodes=EXPECTED_CENTRAL_NODES)
+        nodes=PRIVATE_CENTRAL_NODES)
     expected['eu-west-1'].update(
         subnets=EU_WEST_SUBNETS,
         taken_ips=TAKEN_WEST_IPS,
-        nodes=EXPECTED_WEST_NODES)
+        nodes=PRIVATE_WEST_NODES)
     actual = prepare_rings(region_rings)
     assert actual == expected
 
@@ -562,8 +601,8 @@ def test_create_security_groups(ec2_sg_fixture):
     cluster = {'name': 'test-cluster'}
 
     region_rings = copy.deepcopy(REGION_RINGS)
-    region_rings['eu-central-1']['nodes'] = EXPECTED_CENTRAL_NODES
-    region_rings['eu-west-1']['nodes'] = EXPECTED_WEST_NODES
+    region_rings['eu-central-1']['nodes'] = PRIVATE_CENTRAL_NODES
+    region_rings['eu-west-1']['nodes'] = PRIVATE_WEST_NODES
 
     expected = copy.deepcopy(region_rings)
     expected['eu-central-1']['security_group_id'] = 'sg-central-1'
@@ -594,6 +633,69 @@ def test_create_security_groups(ec2_sg_fixture):
                     'UserIdGroupPairs': [{'GroupId': 'sg-west-1'}]
                 }
             ]
+        )
+
+
+def test_create_security_groups_dmz(ec2_sg_fixture):
+    cluster = {'name': 'test-cluster'}
+
+    region_rings = {
+        'eu-central-1': {
+            'dmz': True,
+            'rings': {'size': 2},
+            'nodes': PUBLIC_CENTRAL_NODES
+        },
+        'eu-west-1': {
+            'dmz': True,
+            'rings': {'size': 3},
+            'nodes': PUBLIC_WEST_NODES
+        }
+    }
+
+    expected = copy.deepcopy(region_rings)
+    expected['eu-central-1']['security_group_id'] = 'sg-central-1'
+    expected['eu-west-1']['security_group_id'] = 'sg-west-1'
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress.return_value = None
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
+
+    # TODO: order is not defined
+    all_rules = [
+        {
+            'IpProtocol': 'tcp',
+            'FromPort': 7001,
+            'ToPort':   7001,
+            'IpRanges': [
+                {
+                    'CidrIp': '{}/32'.format(node['PublicIp'])
+                }
+            ]
+        }
+        for node in (PUBLIC_CENTRAL_NODES + PUBLIC_WEST_NODES)
+    ]
+
+    actual = add_security_groups(cluster, None, region_rings)
+    assert actual == expected
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-central-1',
+            IpPermissions=(all_rules + [
+                {
+                    'IpProtocol': '-1',
+                    'UserIdGroupPairs': [{'GroupId': 'sg-central-1'}]
+                }
+            ])
+        )
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-west-1',
+            IpPermissions=(all_rules + [
+                {
+                    'IpProtocol': '-1',
+                    'UserIdGroupPairs': [{'GroupId': 'sg-west-1'}]
+                }
+            ])
         )
 
 
