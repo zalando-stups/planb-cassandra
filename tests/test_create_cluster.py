@@ -17,6 +17,7 @@ from planb.create_cluster import \
     get_region_ip_iterator, \
     get_subnet_name, \
     make_nodes, \
+    prepare_rings, \
     seed_iterator
 
 
@@ -82,8 +83,7 @@ def ec2_fixture(monkeypatch):
         'Reservations': [
             {
                 'Instances': [
-                    {'PrivateIpAddress': '172.31.0.1'},
-                    {'PrivateIpAddress': '172.31.8.10'}
+                    {'PrivateIpAddress': '172.31.8.11'}
                 ]
             }
         ]
@@ -97,8 +97,8 @@ def ec2_fixture(monkeypatch):
         'Reservations': [
             {
                 'Instances': [
-                    {'PrivateIpAddress': '10.1.0.1'},
-                    {'PrivateIpAddress': '10.1.8.10'}
+                    {'PrivateIpAddress': '172.31.100.11'},
+                    {'PrivateIpAddress': '172.31.116.11'}
                 ]
             }
         ]
@@ -317,7 +317,6 @@ def test_make_nodes_one_ring():
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = region_taken_ips['eu-west-1']
-    eu_west['elastic_ips'] = []
     actual = make_nodes(eu_west)
     assert actual == expected_west_nodes
 
@@ -327,7 +326,6 @@ def test_make_nodes_two_rings():
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = region_taken_ips['eu-central-1']
-    eu_central['elastic_ips'] = []
     actual = make_nodes(eu_central)
     assert actual == expected_central_nodes
 
@@ -491,8 +489,8 @@ def test_create_user_data_for_ring():
 def test_add_taken_private_ips(ec2_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
     expected = copy.deepcopy(REGION_RINGS)
-    expected['eu-central-1']['taken_ips'] = set(['172.31.0.1', '172.31.8.10'])
-    expected['eu-west-1']['taken_ips'] = set(['10.1.0.1', '10.1.8.10'])
+    expected['eu-central-1']['taken_ips'] = region_taken_ips['eu-central-1']
+    expected['eu-west-1']['taken_ips'] = region_taken_ips['eu-west-1']
     actual = add_taken_private_ips(region_rings)
     assert actual == expected
 
@@ -506,11 +504,19 @@ def test_add_subnets(ec2_fixture):
     assert actual == expected
     
 
-# def test_prepare_rings(ec2_fixture):
-#     region_rings = ...
-#     expected = ..
-#     actual = prepare_rings(region_rings)
-#     assert actual == expected
+def test_prepare_rings(ec2_fixture):
+    region_rings = copy.deepcopy(REGION_RINGS)
+    expected = copy.deepcopy(REGION_RINGS)
+    expected['eu-central-1'].update(
+        subnets=EU_CENTRAL_SUBNETS,
+        taken_ips=region_taken_ips['eu-central-1'],
+        nodes=expected_central_nodes)
+    expected['eu-west-1'].update(
+        subnets=EU_WEST_SUBNETS,
+        taken_ips=region_taken_ips['eu-west-1'],
+        nodes=expected_west_nodes)
+    actual = prepare_rings(region_rings)
+    assert actual == expected
 
 
 #def test_create_rings(ec2_fixture):

@@ -320,7 +320,7 @@ def get_region_ip_iterator(
 def make_nodes(region: dict) -> list:
     ipiter = get_region_ip_iterator(
         region['subnets'], region['taken_ips'],
-        region['elastic_ips'], region['dmz'])
+        region.get('elastic_ips', []), region['dmz'])
     nodes = []
     seeds = seed_iterator(region['rings'])
     for s, ip in zip(seeds, ipiter):
