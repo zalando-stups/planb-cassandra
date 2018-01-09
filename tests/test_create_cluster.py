@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from planb.create_cluster import \
     IpAddressPoolDepletedException, \
+    add_elastic_ips, \
     add_elastic_ips_to_region, \
     add_nodes_to_regions, \
     add_taken_private_ips, \
@@ -16,6 +17,54 @@ from planb.create_cluster import \
     get_subnet_name, \
     make_nodes, \
     seed_iterator
+
+
+EC2_CENTRAL_EIPS = [
+    {'PublicIp': '12.34', 'AllocationId': 'a1'},
+    {'PublicIp': '56.78', 'AllocationId': 'a2'}
+]
+
+
+EC2_WEST_EIPS = [
+    {'PublicIp': '34.12', 'AllocationId': 'b1'},
+    {'PublicIp': '78.56', 'AllocationId': 'b2'},
+    {'PublicIp': '90.12', 'AllocationId': 'b3'}
+]
+
+
+@pytest.fixture
+def ec2_fixture(monkeypatch):
+    ec2_central = MagicMock()
+    ec2_central.describe_instances.return_value = {
+        'Reservations': [
+            {
+                'Instances': [
+                    {'PrivateIpAddress': '172.31.0.1'},
+                    {'PrivateIpAddress': '172.31.8.10'}
+                ]
+            }
+        ]
+    }
+    ec2_central.allocate_address.side_effect = EC2_CENTRAL_EIPS
+    ec2_west = MagicMock()
+    ec2_west.describe_instances.return_value = {
+        'Reservations': [
+            {
+                'Instances': [
+                    {'PrivateIpAddress': '10.1.0.1'},
+                    {'PrivateIpAddress': '10.1.8.10'}
+                ]
+            }
+        ]
+    }
+    ec2_west.allocate_address.side_effect = EC2_WEST_EIPS
+    ec2 = {
+        'eu-central-1': ec2_central,
+        'eu-west-1': ec2_west
+    }
+    client = MagicMock()
+    client.side_effect = lambda _, region_name: ec2[region_name]
+    monkeypatch.setattr('planb.aws.boto_client', client)
 
 
 def test_get_subnet_name():
@@ -185,6 +234,28 @@ def test_region_elastic_ip_allocation():
     expected['elastic_ips'] = elastic_ips
 
     actual = add_elastic_ips_to_region(ec2, region)
+    assert actual == expected
+
+
+def test_add_elastic_ips(ec2_fixture):
+    region_rings = {
+        'eu-central-1': {
+            'dmz': True,
+            'rings': [
+                {'size': 2}
+            ]
+        },
+        'eu-west-1': {
+            'dmz': True,
+            'rings': [
+                {'size': 3}
+            ]
+        }
+    }
+    expected = copy.deepcopy(region_rings)
+    expected['eu-central-1']['elastic_ips'] = EC2_CENTRAL_EIPS
+    expected['eu-west-1']['elastic_ips'] = EC2_WEST_EIPS
+    actual = add_elastic_ips(region_rings)
     assert actual == expected
 
     
@@ -373,37 +444,7 @@ def test_create_user_data_for_ring():
 #     create_rings(boto_client_factory)
 
 
-def test_add_taken_private_ips(monkeypatch):
-    ec2_central = MagicMock()
-    ec2_central.describe_instances.return_value = {
-        'Reservations': [
-            {
-                'Instances': [
-                    {'PrivateIpAddress': '172.31.0.1'},
-                    {'PrivateIpAddress': '172.31.8.10'}
-                ]
-            }
-        ]
-    }
-    ec2_west = MagicMock()
-    ec2_west.describe_instances.return_value = {
-        'Reservations': [
-            {
-                'Instances': [
-                    {'PrivateIpAddress': '10.1.0.1'},
-                    {'PrivateIpAddress': '10.1.8.10'}
-                ]
-            }
-        ]
-    }
-    ec2 = {
-        'eu-central-1': ec2_central,
-        'eu-west-1': ec2_west
-    }
-    client = MagicMock()
-    client.side_effect = lambda _, region_name: ec2[region_name]
-    monkeypatch.setattr('planb.aws.boto_client', client)
-
+def test_add_taken_private_ips(ec2_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
     expected = copy.deepcopy(REGION_RINGS)
     expected['eu-central-1']['taken_ips'] = set(['172.31.0.1', '172.31.8.10'])

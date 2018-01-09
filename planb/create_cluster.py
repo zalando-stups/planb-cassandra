@@ -366,9 +366,6 @@ def add_elastic_ips_to_region(ec2: object, region: dict) -> dict:
     return dict(region, elastic_ips=ips)
 
 
-#
-# This function doesn't have a test because it creates a boto client itself.
-#
 def add_elastic_ips(region_rings: dict) -> dict:
     def maybe_add_ips(region_name: str, region: dict) -> dict:
         if region['dmz']:
