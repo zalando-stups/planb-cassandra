@@ -5,6 +5,8 @@ import copy
 import time
 import io
 import os
+import functools
+
 from datetime import datetime
 
 
@@ -78,3 +80,7 @@ def override_ephemeral_block_devices(mappings: dict) -> dict:
 
 def environment_as_dict(environment: list) -> dict:
     return dict(map(lambda x: x.split("=", 1), environment))
+
+
+def thread_val(i, funcs):
+    return functools.reduce(lambda x, f: f(x), funcs, i)

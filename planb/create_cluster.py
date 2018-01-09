@@ -26,7 +26,7 @@ from .aws import list_instances, fetch_user_data, \
     ensure_instance_profile
 
 from .common import override_ephemeral_block_devices, \
-    dump_user_data_for_taupage, environment_as_dict
+    dump_user_data_for_taupage, environment_as_dict, thread_val
 
 MAX_SEEDS_PER_RING = 3
 
@@ -776,11 +776,11 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
 
 
 def prepare_rings(region_rings: dict) -> dict:
-    region_rings = add_subnets(region_rings)
-    region_rings = add_taken_private_ips(region_rings)
-    region_rings = add_elastic_ips(region_rings)
-    region_rings = add_nodes_to_regions(region_rings)
-    return region_rings
+    return thread_val(region_rings,
+                      [add_subnets,
+                       add_taken_private_ips,
+                       add_elastic_ips,
+                       add_nodes_to_regions])
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
