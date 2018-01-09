@@ -4,10 +4,12 @@ import copy
 
 from unittest.mock import MagicMock
 
+import planb
 from planb.create_cluster import \
     IpAddressPoolDepletedException, \
     add_elastic_ips_to_region, \
     add_nodes_to_regions, \
+    add_taken_private_ips, \
     collect_seed_nodes, \
     create_user_data_for_ring, \
     create_user_data_template, \
@@ -357,3 +359,34 @@ def test_create_user_data_for_ring():
         }
     }
     assert create_user_data_for_ring(template, ring, dmz=False) == expected
+
+# def test_prepare_rings():
+#     ec2 = MagicMock()
+#     ec2.allocate_address.side_effect = elastic_ips
+
+#     actual = prepare_rings(fn, )
+
+
+# # def create_rings(factory_fn: object, cluster: dict, region: dict):
+
+# def test_create_rings():
+
+#     create_rings(boto_client_factory)
+
+
+def test_add_taken_private_ips(monkeypatch):
+    ec2 = MagicMock()
+    ec2.describe_instances.return_value = {'Reservations': []}
+
+    client = MagicMock()
+    client.return_value = ec2
+    print('test before: planb.aws.boto_client: {}'.format(planb.aws.boto_client))
+    monkeypatch.setattr('planb.aws.boto_client', client)
+    print('test  after: planb.aws.boto_client: {}'.format(planb.aws.boto_client))
+
+    region_rings = copy.deepcopy(REGION_RINGS)
+    expected = copy.deepcopy(REGION_RINGS)
+    expected['eu-central-1']['taken_ips'] = set()
+    expected['eu-west-1']['taken_ips'] = set()
+    actual = add_taken_private_ips(region_rings)
+    assert actual == expected

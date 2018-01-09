@@ -20,7 +20,8 @@ import click
 from botocore.exceptions import ClientError
 from clickclick import Action, info
 
-from .aws import boto_client, list_instances, fetch_user_data, \
+import planb.aws as aws
+from .aws import list_instances, fetch_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
     ensure_instance_profile
 
@@ -39,7 +40,7 @@ def create_security_group(region: str, ips: list, use_dmz: bool,
                           cluster_name: str, node_ips: dict) -> dict:
     description = 'Allow Cassandra nodes to talk to each other on port 7001'
     with Action('Creating Security Group in {}..'.format(region)):
-        ec2 = boto_client('ec2', region)
+        ec2 = aws.boto_client('ec2', region)
         resp = ec2.describe_vpcs()
         # TODO: support more than one VPC..
         vpc = resp['Vpcs'][0]
@@ -119,7 +120,7 @@ def extend_security_group(region: str, sg: dict, other_region_ips: list):
             for ip in other_region_ips
         ]
 
-        ec2 = boto_client('ec2', region)
+        ec2 = aws.boto_client('ec2', region)
         ec2.authorize_security_group_ingress(
             GroupId=sg['GroupId'],
             IpPermissions=ip_permissions
@@ -345,12 +346,9 @@ def list_taken_private_ips(ec2: object) -> set:
     return set([i['PrivateIpAddress'] for i in instances])
 
 
-#
-# This function doesn't have a test because it creates a boto client itself.
-#
 def add_taken_private_ips(region_rings: dict) -> dict:
     def add_to_region(region_name: str, region: dict) -> dict:
-        ec2 = boto_client('ec2', region_name)
+        ec2 = aws.boto_client('ec2', region_name)
         return dict(region, taken_ips=list_taken_private_ips(ec2))
 
     return {region_name: add_to_region(region_name, region)
@@ -374,7 +372,7 @@ def add_elastic_ips_to_region(ec2: object, region: dict) -> dict:
 def add_elastic_ips(region_rings: dict) -> dict:
     def maybe_add_ips(region_name: str, region: dict) -> dict:
         if region['dmz']:
-            ec2 = boto_client('ec2', region_name)
+            ec2 = aws.boto_client('ec2', region_name)
             return add_elastic_ips_to_region(ec2, region)
         else:
             return region
@@ -403,7 +401,7 @@ def get_subnet_name(subnet: dict) -> str:
 
 
 def get_region_subnets(region_name: str) -> list:
-    ec2 = boto_client('ec2', region_name)
+    ec2 = aws.boto_client('ec2', region_name)
     resp = ec2.describe_subnets()
     sorted_subnets = sorted(
         resp['Subnets'],
@@ -431,7 +429,7 @@ def make_dns_records(region: str, ips: list) -> list:
 def setup_dns_records(
         cluster_name: str, hosted_zone: str, node_ips: dict, dc_suffix: str=""):
 
-    r53 = boto_client('route53')
+    r53 = aws.boto_client('route53')
 
     zone = None
     zones = r53.list_hosted_zones_by_name(DNSName=hosted_zone)
@@ -572,7 +570,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         region
     )
     with Action(msg) as act:
-        ec2 = boto_client('ec2', region)
+        ec2 = aws.boto_client('ec2', region)
 
         mappings = ami.block_device_mappings
         block_devices = override_ephemeral_block_devices(mappings)
@@ -762,7 +760,7 @@ def validate_artifact_version(options: dict) -> dict:
 
 
 def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
-    ec2 = boto_client('ec2', from_region)
+    ec2 = aws.boto_client('ec2', from_region)
     running_instances = [
         i
         for i in list_instances(ec2, cluster['name'])
@@ -778,6 +776,10 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
     # TODO: should user be able to specify the clone-from instance?
     instance_id = running_instances[0]['InstanceId']
     return decode_user_data(fetch_user_data(ec2, instance_id))
+
+
+def prepare_rings(aws_fn: object, region_rings: dict) -> dict:
+    pass
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
@@ -927,13 +929,13 @@ def create_cluster(options: dict):
         # Undo stack sounds like a natural choice.
         #
         for region, sg in security_groups.items():
-            ec2 = boto_client('ec2', region)
+            ec2 = aws.boto_client('ec2', region)
             info('Cleaning up security group: {}'.format(sg['GroupId']))
             ec2.delete_security_group(GroupId=sg['GroupId'])
 
         if options['use_dmz']:
             for region, ips in node_ips.items():
-                ec2 = boto_client('ec2', region)
+                ec2 = aws.boto_client('ec2', region)
                 for ip in ips:
                     info('Releasing IP address: {}'.format(ip['PublicIp']))
                     ec2.release_address(AllocationId=ip['AllocationId'])
@@ -1084,12 +1086,12 @@ def extend_cluster(options: dict):
             sg = security_groups.get(region)
             if sg:
                 info('Cleaning up security group: {}'.format(sg['GroupId']))
-                ec2 = boto_client('ec2', region)
+                ec2 = aws.boto_client('ec2', region)
                 ec2.delete_security_group(GroupId=sg['GroupId'])
 
         if options['use_dmz']:
             for region, ips in node_ips.items():
-                ec2 = boto_client('ec2', region)
+                ec2 = aws.boto_client('ec2', region)
                 for ip in ips:
                     if 'AllocationId' in ip:
                         info('Releasing IP address: {}'.format(ip['PublicIp']))
