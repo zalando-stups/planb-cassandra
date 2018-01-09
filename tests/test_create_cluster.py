@@ -670,8 +670,10 @@ def test_create_security_groups_dmz(ec2_sg_fixture):
     expected['eu-central-1']['security_group_id'] = 'sg-central-1'
     expected['eu-west-1']['security_group_id'] = 'sg-west-1'
 
-    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress.return_value = None
-    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .return_value = None
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
+        .return_value = None
 
     # TODO: order is not defined
     all_rules = make_ingress_rules(PUBLIC_CENTRAL_NODES + PUBLIC_WEST_NODES)
@@ -714,8 +716,15 @@ def test_extend_security_groups(ec2_sg_fixture):
     expected = copy.deepcopy(region_rings)
     expected['eu-west-1']['security_group_id'] = 'sg-west-1'
 
-    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress.return_value = None
-    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
+    observed_west_rules = []
+    def west_ingress_watcher(GroupId: str, IpPermissions: list, **kwargs):
+        assert GroupId == 'sg-west-1'
+        observed_west_rules.extend(IpPermissions)
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .return_value = None
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
+        .side_effect = west_ingress_watcher
 
     central_rules = make_ingress_rules(PUBLIC_CENTRAL_NODES)
     west_rules = make_ingress_rules(PUBLIC_WEST_NODES)
@@ -728,14 +737,8 @@ def test_extend_security_groups(ec2_sg_fixture):
             GroupId='sg-central-1',
             IpPermissions=west_rules
         )
-    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
-        .assert_called_once_with(
-            GroupId='sg-west-1',
-            # TODO: order matters!
-            IpPermissions=(west_rules + central_rules + [
-                {
-                    'IpProtocol': '-1',
-                    'UserIdGroupPairs': [{'GroupId': 'sg-west-1'}]
-                }
-            ])
-        )
+    all_rules = central_rules + west_rules
+    extract_ips = lambda rules: [r['CidrIp']
+                                 for rule in rules
+                                 for r in rule.get('IpRanges', [])]
+    assert sorted(extract_ips(observed_west_rules)) == sorted(extract_ips(all_rules))
