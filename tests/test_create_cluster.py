@@ -9,6 +9,7 @@ from planb.create_cluster import \
     add_elastic_ips, \
     add_elastic_ips_to_region, \
     add_nodes_to_regions, \
+    add_security_groups, \
     add_subnets, \
     add_taken_private_ips, \
     collect_seed_nodes, \
@@ -76,8 +77,7 @@ BOTO_WEST_SUBNETS = [
 ]
 
 
-@pytest.fixture
-def ec2_fixture(monkeypatch):
+def make_base_ec2_fixture():
     ec2_central = MagicMock()
     ec2_central.describe_instances.return_value = {
         'Reservations': [
@@ -107,13 +107,54 @@ def ec2_fixture(monkeypatch):
     ec2_west.describe_subnets.return_value = {
         'Subnets': BOTO_WEST_SUBNETS
     }
-    ec2 = {
+    return {
         'eu-central-1': ec2_central,
         'eu-west-1': ec2_west
     }
+
+
+def install_fixture(monkeypatch, region_mock):
     client = MagicMock()
-    client.side_effect = lambda _, region_name: ec2[region_name]
+    client.side_effect = lambda _, region_name: region_mock[region_name]
     monkeypatch.setattr('planb.aws.boto_client', client)
+
+
+@pytest.fixture
+def ec2_fixture(monkeypatch):
+    ec2 = make_base_ec2_fixture()
+    install_fixture(monkeypatch, ec2)
+    return ec2
+
+
+@pytest.fixture
+def ec2_sg_fixture(monkeypatch):
+    ec2 = make_base_ec2_fixture()
+    ec2['eu-central-1'].describe_vpcs.return_value = {
+        'Vpcs': [
+            {'VpcId': 'vpc-central-1'}
+        ]
+    }
+    ec2['eu-west-1'].describe_vpcs.return_value = {
+        'Vpcs': [
+            {'VpcId': 'vpc-west-1'}
+        ]
+    }
+    ec2['eu-central-1'].describe_security_groups.return_value = {
+        'SecurityGroups': []
+    }
+    ec2['eu-west-1'].describe_security_groups.return_value = {
+        'SecurityGroups': []
+    }
+    ec2['eu-central-1'].create_security_group.return_value = {
+        'GroupId': 'sg-central-1'
+    }
+    ec2['eu-west-1'].create_security_group.return_value = {
+        'GroupId': 'sg-west-1'
+    }
+    ec2['eu-central-1'].create_tags.return_value = None
+    ec2['eu-west-1'].create_tags.return_value = None
+    install_fixture(monkeypatch, ec2)
+    return ec2
 
 
 def test_get_subnet_name():
@@ -517,6 +558,44 @@ def test_prepare_rings(ec2_fixture):
     assert actual == expected
 
 
-#def test_create_rings(ec2_fixture):
+def test_create_security_groups(ec2_sg_fixture):
+    cluster = {'name': 'test-cluster'}
 
-#     create_rings(boto_client_factory)
+    region_rings = copy.deepcopy(REGION_RINGS)
+    region_rings['eu-central-1']['nodes'] = EXPECTED_CENTRAL_NODES
+    region_rings['eu-west-1']['nodes'] = EXPECTED_WEST_NODES
+
+    expected = copy.deepcopy(region_rings)
+    expected['eu-central-1']['security_group_id'] = 'sg-central-1'
+    expected['eu-west-1']['security_group_id'] = 'sg-west-1'
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress.return_value = None
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress.return_value = None
+
+    actual = add_security_groups(cluster, None, region_rings)
+    assert actual == expected
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-central-1',
+            IpPermissions=[
+                {
+                    'IpProtocol': '-1',
+                    'UserIdGroupPairs': [{'GroupId': 'sg-central-1'}]
+                }
+            ]
+        )
+    ec2_sg_fixture['eu-west-1'].authorize_security_group_ingress\
+        .assert_called_once_with(
+            GroupId='sg-west-1',
+            IpPermissions=[
+                {
+                    'IpProtocol': '-1',
+                    'UserIdGroupPairs': [{'GroupId': 'sg-west-1'}]
+                }
+            ]
+        )
+
+
+def test_extend_security_groups(ec2_sg_fixture):
+    assert False

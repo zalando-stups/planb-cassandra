@@ -36,72 +36,55 @@ def find_security_group_by_name(ec2: object, sg_name: str) -> dict:
     return resp['SecurityGroups'][0]
 
 
-def create_security_group(region: str, ips: list, use_dmz: bool,
-                          cluster_name: str, node_ips: dict) -> dict:
+def create_security_group(
+        cluster: dict, region_name: str, region: dict, all_nodes: list) -> dict:
     description = 'Allow Cassandra nodes to talk to each other on port 7001'
-    with Action('Creating Security Group in {}..'.format(region)):
-        ec2 = aws.boto_client('ec2', region)
-        resp = ec2.describe_vpcs()
-        # TODO: support more than one VPC..
-        vpc = resp['Vpcs'][0]
-        sg_name = cluster_name
-        sg = ec2.create_security_group(
-            GroupName=sg_name,
-            VpcId=vpc['VpcId'],
-            Description=description
-        )
 
-        ec2.create_tags(
-            Resources=[sg['GroupId']],
-            Tags=[{'Key': 'Name', 'Value': sg_name}]
-        )
-        ip_permissions = []
-        if use_dmz:
-            # NOTE: we need to allow ALL public IPs (from all regions)
-            for ip in itertools.chain(*node_ips.values()):
-                ingress_rule = {
-                    'IpProtocol': 'tcp',
-                    'FromPort': 7001,  # port range: From-To
-                    'ToPort':   7001,
-                    'IpRanges': [
-                        {
-                            'CidrIp': '{}/32'.format(ip['PublicIp'])
-                        }
-                    ]
-                }
-                ip_permissions.append(ingress_rule)
-        # if internal subnets are used we just allow access from
-        # within the SG, which we also need in multi-region setup
-        # (for the nodetool?)
-        self_ingress_rule = {
-            'IpProtocol': '-1',
-            'UserIdGroupPairs': [{'GroupId': sg['GroupId']}]
-        }
-        ip_permissions.append(self_ingress_rule)
+    ec2 = aws.boto_client('ec2', region_name)
+    resp = ec2.describe_vpcs()
+    # TODO: support more than one VPC..
+    vpc = resp['Vpcs'][0]
+    sg_name = cluster['name']
+    sg = ec2.create_security_group(
+        GroupName=sg_name,
+        VpcId=vpc['VpcId'],
+        Description=description
+    )
 
-        # if we can find the Odd security group, authorize SSH access from it
-        try:
-            odd_sg = find_security_group_by_name(ec2, 'Odd (SSH Bastion Host)')
-            odd_ingress_rule = {
+    ec2.create_tags(
+        Resources=[sg['GroupId']],
+        Tags=[{'Key': 'Name', 'Value': sg_name}]
+    )
+    ip_permissions = []
+    if region['dmz']:
+        # NOTE: we need to allow ALL public IPs (from all regions)
+        for ip in all_nodes:
+            ingress_rule = {
                 'IpProtocol': 'tcp',
-                'FromPort': 22,  # port range: From-To
-                'ToPort': 22,
-                'UserIdGroupPairs': [{
-                    'GroupId': odd_sg['GroupId']
-                }]
+                'FromPort': 7001,  # port range: From-To
+                'ToPort':   7001,
+                'IpRanges': [
+                    {
+                        'CidrIp': '{}/32'.format(ip['PublicIp'])
+                    }
+                ]
             }
-            ip_permissions.append(odd_ingress_rule)
-        except ClientError:
-            msg = "No Odd host in region {}, skipping Security Group rule."
-            info(msg.format(region))
-            pass
+            ip_permissions.append(ingress_rule)
+    # if internal subnets are used we just allow access from
+    # within the SG, which we also need in multi-region setup
+    # (for the nodetool?)
+    self_ingress_rule = {
+        'IpProtocol': '-1',
+        'UserIdGroupPairs': [{'GroupId': sg['GroupId']}]
+    }
+    ip_permissions.append(self_ingress_rule)
 
-        ec2.authorize_security_group_ingress(
-            GroupId=sg['GroupId'],
-            IpPermissions=ip_permissions
-        )
+    ec2.authorize_security_group_ingress(
+        GroupId=sg['GroupId'],
+        IpPermissions=ip_permissions
+    )
 
-        return sg
+    return sg['GroupId']
 
 
 def extend_security_group(region: str, sg: dict, other_region_ips: list):
@@ -150,6 +133,17 @@ def get_public_ips_from_sg(sg: dict) -> list:
                         'PublicIp': cidr_ip.replace('/32', '')
                     })
     return result
+
+
+def add_security_groups(
+        cluster: dict, from_region: str, region_rings: dict) -> dict:
+
+    all_nodes = sum([region['nodes'] for _, region in region_rings.items()], [])
+    create_sg = lambda region_name, region: \
+        dict(region, security_group_id=create_security_group(
+                         cluster, region_name, region, all_nodes))
+    return {region_name: create_sg(region_name, region)
+            for region_name, region in region_rings.items()}
 
 
 def find_taupage_amis(regions: list) -> dict:
@@ -787,6 +781,9 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # 1. Go to Orodruin TODO?
 
     region_rings = prepare_rings(region_rings)
+
+    # TODO: SGs!
+    region_rings = add_security_groups(cluster, from_region, region_rings)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
