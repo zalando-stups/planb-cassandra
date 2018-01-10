@@ -546,6 +546,38 @@ def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
     ec2.create_tags(Resources=[vol['VolumeId']], Tags=tags)
 
 
+def launch_node(
+        cluster: dict, region_name: str, region: dict, ring: dict,
+        node: dict) -> str:
+
+    ec2 = aws.boto_client('ec2', region_name)
+
+    # add this node's EBS data volume to the user data
+    user_data = copy.deepcopy(ring['user_data'])
+    user_data['volumes']['ebs']['/dev/xvdf'] = node['volume_name']
+    taupage_user_data = dump_user_data_for_taupage(user_data)
+
+    ami = region['taupage_ami']
+    block_device_mappings = prepare_block_device_mappings(
+        ami['block_device_mappings']
+    )
+
+    resp = ec2.run_instances(
+        ImageId=ami['id'],
+        MinCount=1,
+        MaxCount=1,
+        SecurityGroupIds=[region['security_group_id']],
+        UserData=taupage_user_data,
+        InstanceType=ring['instance_type'],
+        SubnetId=node['subnet_id'],
+        PrivateIpAddress=node['PrivateIp'],
+        BlockDeviceMappings=block_device_mappings,
+        IamInstanceProfile={'Arn': cluster['instance_profile']['Arn']},
+        DisableApiTermination=cluster['protect_from_termination']
+    )
+    return resp['Instances'][0]['InstanceId']
+
+
 def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
                     security_group_id: str, is_seed: bool, options: dict):
 

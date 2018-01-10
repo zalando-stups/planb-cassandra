@@ -18,6 +18,7 @@ from planb.create_cluster import \
     create_user_data_template, \
     get_region_ip_iterator, \
     get_subnet_name, \
+    launch_node, \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
@@ -87,6 +88,12 @@ BOTO_WEST_SUBNETS = [
 ]
 
 
+def install_boto_client_mock(monkeypatch, region_mock: dict):
+    client = MagicMock()
+    client.side_effect = lambda _, region_name: region_mock[region_name]
+    monkeypatch.setattr('planb.aws.boto_client', client)
+
+
 @pytest.fixture
 def ec2_fixture(monkeypatch):
     ec2_central = MagicMock()
@@ -122,13 +129,9 @@ def ec2_fixture(monkeypatch):
         'eu-central-1': ec2_central,
         'eu-west-1': ec2_west
     }
-
-    client = MagicMock()
-    client.side_effect = lambda _, region_name: ec2[region_name]
-    monkeypatch.setattr('planb.aws.boto_client', client)
-
+    install_boto_client_mock(monkeypatch, ec2)
     return ec2
-
+    
 
 @pytest.fixture
 def ec2_taupage_fixture(monkeypatch):
@@ -202,6 +205,15 @@ def ec2_sg_fixture(ec2_fixture):
     ec2['eu-central-1'].create_tags.return_value = None
     ec2['eu-west-1'].create_tags.return_value = None
 
+    return ec2
+
+
+@pytest.fixture
+def ec2_launch_fixture(monkeypatch):
+    ec2 = {
+        'eu-central-1': MagicMock()
+    }
+    install_boto_client_mock(monkeypatch, ec2)
     return ec2
 
 
@@ -858,4 +870,60 @@ def test_add_taupage_amis(ec2_taupage_fixture):
     expected['eu-central-1']['taupage_ami'] = EU_CENTRAL_TAUPAGE_AMI
     expected['eu-west-1']['taupage_ami'] = EU_WEST_TAUPAGE_AMI
     actual = add_taupage_amis(region_rings)
+    assert actual == expected
+
+
+def test_launch_node(ec2_launch_fixture):
+    ec2 = ec2_launch_fixture
+
+    cluster = {
+        'name': 'test-cluster',
+        'instance_profile': {
+            'Arn': 'arn:test-instance-profile'
+        },
+        'protect_from_termination': False
+    }
+    region = {
+        'taupage_ami': EU_CENTRAL_TAUPAGE_AMI,
+        'security_group_id': 'sg-central-1'
+    }
+    ring = {
+        'instance_type': 't2.nano',
+        'user_data': {
+            'volumes': {
+                'ebs': {
+                }
+            }
+        }
+    }
+    node = {
+        'PrivateIp': '172.31.0.0',
+        'subnet_id': 'subnet-123',
+        'volume_name': 'test-cluster-172.31.0.0'
+    }
+    expected = 'i-central-123'
+    def check_run_instances(**kwargs):
+        del(kwargs['UserData']) # TODO: ignoring user data for now
+        assert kwargs == {
+            'ImageId': 'ami-central-1',
+            'MinCount': 1,
+            'MaxCount': 1,
+            'SecurityGroupIds': ['sg-central-1'],
+            'InstanceType': 't2.nano',
+            'SubnetId': 'subnet-123',
+            'PrivateIpAddress': '172.31.0.0',
+            'BlockDeviceMappings': [],
+            'IamInstanceProfile': {'Arn': 'arn:test-instance-profile'},
+            'DisableApiTermination': False
+        }
+        return {
+            'Instances': [
+                {
+                    'InstanceId': expected
+                }
+            ]
+        }
+    ec2['eu-central-1'].run_instances.side_effect = check_run_instances
+
+    actual = launch_node(cluster, 'eu-central-1', region, ring, node)
     assert actual == expected
