@@ -1,6 +1,27 @@
 import pytest
 
-from planb.common import environment_as_dict, decode_user_data, thread_val
+from planb.common import environment_as_dict, decode_user_data, thread_val, \
+    rectify_block_device_mapping
+
+
+def test_rectify_block_device_mapping():
+    assert rectify_block_device_mapping(
+        {
+            'DeviceName': '/dev/sda',
+            'Ebs': {'Encrypted': 'False', 'SnapshotId': 'snap-12345'}
+        }
+    ) == {
+        'DeviceName': '/dev/sda',
+        'Ebs': {'SnapshotId': 'snap-12345'}
+    }
+    assert rectify_block_device_mapping(
+        {
+            'DeviceName': '/dev/sdb'
+        }
+    ) == {
+        'DeviceName': '/dev/sdb',
+        'NoDevice': ''
+    }
 
 
 def test_environment_as_dict():

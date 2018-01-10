@@ -25,7 +25,7 @@ from .aws import list_instances, fetch_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
     ensure_instance_profile
 
-from .common import override_ephemeral_block_devices, \
+from .common import prepare_block_device_mappings, \
     dump_user_data_for_taupage, environment_as_dict, thread_val
 
 MAX_SEEDS_PER_RING = 3
@@ -230,13 +230,14 @@ def generate_certificate(cluster_name: str):
     return keystore_data, truststore_data
 
 
-def init_cluster_secuirty_features(cluster: dict):
+def add_cluster_secuirty_features(cluster: dict) -> dict:
     "Enriches the cluster dict with admin password and key/trust-store data."
 
-    cluster['admin_password'] = generate_password()
-    cluster['keystore'], cluster['truststore'] = generate_certificate(
-        cluster['name']
-    )
+    keystore, truststore = generate_certificate(cluster['name'])
+    return dict(cluster,
+                admin_password=generate_password(),
+                keystore=keystore,
+                truststore=truststore)
 
 
 def seed_iterator(rings: list) -> object:
@@ -557,8 +558,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
     with Action(msg) as act:
         ec2 = aws.boto_client('ec2', region)
 
-        mappings = ami.block_device_mappings
-        block_devices = override_ephemeral_block_devices(mappings)
+        mappings = prepare_block_device_mappings(ami.block_device_mappings)
 
         volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
         create_tagged_volume(
@@ -581,7 +581,7 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
             InstanceType=options['instance_type'],
             SubnetId=subnet['SubnetId'],
             PrivateIpAddress=ip['PrivateIp'],
-            BlockDeviceMappings=block_devices,
+            BlockDeviceMappings=mappings,
             IamInstanceProfile={'Arn': options['instance_profile']['Arn']},
             DisableApiTermination=not(options['no_termination_protection'])
         )
@@ -773,23 +773,22 @@ def prepare_rings(region_rings: dict) -> dict:
 
 
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
-    # 1. Go to Orodruin TODO?
 
     region_rings = prepare_rings(region_rings)
-
-    # TODO: SGs!
     region_rings = add_security_groups(cluster, from_region, region_rings)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
     else:
-        init_cluster_secuirty_features(cluster)
+        cluster = add_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster, region_rings)
 
     # TODO: consider starting all seed nodes from all rings first, then normal ones
     for region_name, region in region_rings.items():
         for ring in region['rings']:
-            user_data = create_user_data_for_ring(user_data_template, ring)
+            user_data = create_user_data_for_ring(
+                user_data_template, ring, region['dmz']
+            )
     # *** launch seed nodes
     # *** launch normal nodes
 

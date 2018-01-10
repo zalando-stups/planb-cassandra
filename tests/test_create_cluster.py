@@ -129,14 +129,14 @@ def ec2_taupage_fixture(monkeypatch):
     ec2_central_ami1 = MagicMock()
     ec2_central_ami1.id = 'ami-central-1'
     ec2_central_ami1.name = 'taupage-central-1'
-    ec2_central_ami1.block_device_mappings = {}
+    ec2_central_ami1.block_device_mappings = []
     ec2_central.images.filter.return_value = [ec2_central_ami1]
 
     ec2_west = MagicMock()
     ec2_west_ami1 = MagicMock()
     ec2_west_ami1.id = 'ami-west-1'
     ec2_west_ami1.name = 'taupage-west-1'
-    ec2_west_ami1.block_device_mappings = {}
+    ec2_west_ami1.block_device_mappings = []
     ec2_west.images.filter.return_value = [ec2_west_ami1]
 
     ec2 = {
@@ -201,14 +201,14 @@ def ec2_sg_fixture(ec2_fixture):
 EU_CENTRAL_TAUPAGE_AMI = {
     'id': 'ami-central-1',
     'name': 'taupage-central-1',
-    'block_device_mappings': {}
+    'block_device_mappings': []
 }
 
 
 EU_WEST_TAUPAGE_AMI = {
     'id': 'ami-west-1',
     'name': 'taupage-west-1',
-    'block_device_mappings': {}
+    'block_device_mappings': []
 }
 
 

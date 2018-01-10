@@ -45,37 +45,36 @@ def dump_user_data_for_taupage(user_data: dict) -> str:
     return '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
 
-def override_ephemeral_block_devices(mappings: dict) -> dict:
-    #
-    # Override any ephemeral volumes with NoDevice mapping,
-    # otherwise auto-recovery alarm cannot be actually enabled.
-    #
-    block_devices = []
-    for bd in mappings:
-        if 'Ebs' in bd:
-            #
-            # This has to be our root EBS.
-            #
-            # If the Encrypted flag is present, we have to delete
-            # it even if it matches the actual snapshot setting,
-            # otherwise amazon will complain rather loudly.
-            #
-            # Take a deep copy before deleting the key:
-            #
-            bd = copy.deepcopy(bd)
+def rectify_block_device_mapping(mapping: dict) -> dict:
+    if 'Ebs' in mapping:
+        #
+        # If the Encrypted flag is present, we have to delete
+        # it even if it matches the actual snapshot setting,
+        # otherwise amazon will complain rather loudly.
+        #
+        # Take a deep copy before deleting the key:
+        #
+        m = copy.deepcopy(mapping)
 
-            root_ebs = bd['Ebs']
-            if 'Encrypted' in root_ebs:
-                del(root_ebs['Encrypted'])
+        ebs = m['Ebs']
+        if 'Encrypted' in ebs:
+            del(ebs['Encrypted'])
 
-            block_devices.append(bd)
-        else:
-            # ignore any ephemeral volumes (aka. instance storage)
-            block_devices.append(
-                {'DeviceName': bd['DeviceName'],
-                 'NoDevice': ''}
-            )
-    return block_devices
+        return m
+
+    else:
+        #
+        # Override any ephemeral volumes with NoDevice mapping,
+        # otherwise auto-recovery alarm cannot be actually enabled.
+        #
+        return {
+            'DeviceName': mapping['DeviceName'],
+            'NoDevice': ''
+        }
+
+
+def prepare_block_device_mappings(mappings: list) -> list:
+    return [rectify_block_device_mapping(m) for m in mappings]
 
 
 def environment_as_dict(environment: list) -> dict:

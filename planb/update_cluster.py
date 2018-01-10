@@ -17,7 +17,7 @@ from .aws import boto_client, \
 
 from .common import dump_dict_as_file, load_dict_from_file, \
     decode_user_data, dump_user_data_for_taupage, \
-    override_ephemeral_block_devices, environment_as_dict
+    prepare_block_device_mappings, environment_as_dict
 
 
 """
@@ -271,7 +271,7 @@ def build_run_instances_params(
     params = dict(params, **instance_changes)
 
     image = ec2.describe_images(ImageIds=[params['ImageId']])['Images'][0]
-    mappings = override_ephemeral_block_devices(image['BlockDeviceMappings'])
+    mappings = prepare_block_device_mappings(image['BlockDeviceMappings'])
     params['BlockDeviceMappings'] = mappings
 
     user_data_changes = {
