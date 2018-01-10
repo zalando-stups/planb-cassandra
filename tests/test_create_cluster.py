@@ -742,3 +742,28 @@ def test_extend_security_groups(ec2_sg_fixture):
                                  for rule in rules
                                  for r in rule.get('IpRanges', [])]
     assert sorted(extract_ips(observed_west_rules)) == sorted(extract_ips(all_rules))
+
+
+def test_extend_security_groups_same_region(ec2_sg_fixture):
+    cluster = {'name': 'test-cluster'}
+    from_region = 'eu-central-1'
+    region_rings = {
+        'eu-central-1': {
+            'dmz': False,
+            'nodes': PRIVATE_CENTRAL_NODES
+        }
+    }
+
+    expected = copy.deepcopy(region_rings)
+    expected['eu-central-1']['security_group_id'] = 'sg-central-1'
+
+    observed_central_rules = []
+    def central_ingress_watcher(GroupId: str, IpPermissions: list, **kwargs):
+        observed_central_rules.extend(IpPermissions)
+
+    ec2_sg_fixture['eu-central-1'].authorize_security_group_ingress\
+        .return_value = central_ingress_watcher
+
+    actual = add_security_groups(cluster, from_region, region_rings)
+    assert actual == expected
+    assert observed_central_rules == []

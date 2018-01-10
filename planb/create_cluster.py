@@ -125,7 +125,9 @@ def add_security_groups(
 
     all_nodes = sum([region['nodes'] for _, region in region_rings.items()], [])
 
-    if from_region:
+    if from_region and \
+       from_region not in region_rings:
+
         ec2 = aws.boto_client('ec2', from_region)
         sg = find_security_group_by_name(ec2, cluster['name'])
 
