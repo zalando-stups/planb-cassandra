@@ -763,6 +763,11 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
     return decode_user_data(fetch_user_data(ec2, instance_id))
 
 
+def add_cluster_instance_profile(cluster: dict) -> dict:
+    return dict(cluster,
+                instance_profile=ensure_instance_profile(cluster['name']))
+
+
 def prepare_rings(region_rings: dict) -> dict:
     return thread_val(region_rings,
                       [add_taupage_amis,
@@ -796,6 +801,9 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
 
     region_rings = prepare_rings(region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
+
+    # IAM instance profiles are global (vs. per-region)
+    cluster = add_cluster_instance_profile(cluster)
 
     if from_region:
         user_data_template = fetch_user_data_template(from_region, cluster)
