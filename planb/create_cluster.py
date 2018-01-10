@@ -280,18 +280,17 @@ def get_region_ip_iterator(
         subnets: list, taken_ips: set, elastic_ips: list, dmz: bool) -> object:
     """Returns an iterator over IPs from the cycle of subnets.
        May raise an IpAddressPoolDepletedException."""
-    # We can do this because of the stups naming convention
-    subnet_prefix = 'dmz-' if dmz else 'internal-'
-    nets = [s for s in subnets
-              if s['name'].startswith(subnet_prefix)]
 
-    iterators = {s['name'] : get_network_iterator(s['cidr_block'])
-                 for s in nets}
+    # We can do this because of the STUPS naming convention:
+    subnet_prefix = 'dmz-' if dmz else 'internal-'
+    nets = [dict(s, iterator=get_network_iterator(s['cidr_block']))
+            for s in subnets
+            if s['name'].startswith(subnet_prefix)]
     eips = iter(elastic_ips)
 
-    for s in itertools.cycle(nets):
+    for subnet in itertools.cycle(nets):
         while True:
-            ip = try_next_address(iterators[s['name']], s['cidr_block'])
+            ip = try_next_address(subnet['iterator'], subnet['cidr_block'])
             if ip not in taken_ips:
                 break
         address = {'PrivateIp': ip}
@@ -302,7 +301,7 @@ def get_region_ip_iterator(
             address['AllocationId'] = resp['AllocationId']
         else:
             address['_defaultIp'] = ip
-        address['subnet'] = s['name']
+        address['subnet_id'] = subnet['id']
         yield address
 
 
@@ -393,7 +392,8 @@ def get_region_subnets(region_name: str) -> list:
         resp['Subnets'],
         key=lambda subnet: (subnet['AvailabilityZone'], subnet['CidrBlock'])
     )
-    return [{'name': get_subnet_name(subnet),
+    return [{'id': subnet['SubnetId'],
+             'name': get_subnet_name(subnet),
              'cidr_block': subnet['CidrBlock']}
             for subnet in sorted_subnets]
 
@@ -772,6 +772,26 @@ def prepare_rings(region_rings: dict) -> dict:
                        add_nodes_to_regions])
 
 
+def add_user_data_to_rings(
+        rings: list, user_data_template: dict, dmz: bool) -> list:
+
+    return [dict(r,
+                 user_data=create_user_data_for_ring(user_data_template, r, dmz))
+            for r in rings]
+
+
+def add_user_data_to_region_rings(
+        region_rings: dict, user_data_template: dict) -> dict:
+
+    return {region_name: dict(region,
+                              rings=add_user_data_to_rings(
+                                  region['rings'],
+                                  user_data_template,
+                                  region['dmz']
+                              ))
+            for region_name, region in region_rings.items()}
+
+
 def create_rings(cluster: dict, from_region: str, region_rings: dict):
 
     region_rings = prepare_rings(region_rings)
@@ -783,12 +803,9 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
         cluster = add_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster, region_rings)
 
+    region_rings = add_user_data_to_region_rings(region_rings, user_data_template)
+
     # TODO: consider starting all seed nodes from all rings first, then normal ones
-    for region_name, region in region_rings.items():
-        for ring in region['rings']:
-            user_data = create_user_data_for_ring(
-                user_data_template, ring, region['dmz']
-            )
     # *** launch seed nodes
     # *** launch normal nodes
 
