@@ -95,17 +95,6 @@ def create_security_group(
     return sg['GroupId']
 
 
-def setup_security_groups(use_dmz: bool, cluster_name: str, node_ips: dict,
-                          result: dict) -> dict:
-    '''
-    Allow traffic between regions (or within a VPC, if `use_dmz' is False)
-    '''
-    for region, ips in node_ips.items():
-        result[region] = create_security_group(
-            region, ips, use_dmz, cluster_name, node_ips
-        )
-
-
 def get_public_ips_from_sg(sg: dict) -> list:
     result = []
     for ip in sg['IpPermissions']:
@@ -146,10 +135,17 @@ def add_security_groups(
             for region_name, region in region_rings.items()}
 
 
-def find_taupage_amis(regions: list) -> dict:
+def find_taupage_ami(region_name: str) -> object:
+    pass
+
+
+def add_taupage_amis(region_rings: dict) -> dict:
     '''
     Find latest Taupage AMI for each region
     '''
+    return {region_name: dict(region, taupage_ami=find_taupage_ami(region_name))
+            for region_name, region in region_rings.items()}
+
     result = {}
     for region in regions:
         with Action('Finding latest Taupage AMI in {}..'.format(region)):
@@ -791,10 +787,6 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
         init_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster, region_rings)
 
-    # dostuff
-    # * per region
-    # ** setup or extend SGs
-    # ** per ring
     # TODO: consider starting all seed nodes from all rings first, then normal ones
     for region_name, region in region_rings.items():
         for ring in region['rings']:
@@ -802,7 +794,9 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
     # *** launch seed nodes
     # *** launch normal nodes
 
-    # cleanup
+    # TODO: print status message
+
+    # TODO: cleanup
 
 
 def create_cluster(options: dict):

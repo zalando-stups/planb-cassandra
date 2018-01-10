@@ -79,7 +79,8 @@ BOTO_WEST_SUBNETS = [
 ]
 
 
-def make_base_ec2_fixture():
+@pytest.fixture
+def ec2_fixture(monkeypatch):
     ec2_central = MagicMock()
     ec2_central.describe_instances.return_value = {
         'Reservations': [
@@ -109,28 +110,22 @@ def make_base_ec2_fixture():
     ec2_west.describe_subnets.return_value = {
         'Subnets': BOTO_WEST_SUBNETS
     }
-    return {
+    ec2 = {
         'eu-central-1': ec2_central,
         'eu-west-1': ec2_west
     }
 
-
-def install_fixture(monkeypatch, region_mock):
     client = MagicMock()
-    client.side_effect = lambda _, region_name: region_mock[region_name]
+    client.side_effect = lambda _, region_name: ec2[region_name]
     monkeypatch.setattr('planb.aws.boto_client', client)
 
-
-@pytest.fixture
-def ec2_fixture(monkeypatch):
-    ec2 = make_base_ec2_fixture()
-    install_fixture(monkeypatch, ec2)
     return ec2
 
 
 @pytest.fixture
-def ec2_sg_fixture(monkeypatch):
-    ec2 = make_base_ec2_fixture()
+def ec2_sg_fixture(ec2_fixture):
+    ec2 = ec2_fixture
+
     ec2['eu-central-1'].describe_vpcs.return_value = {
         'Vpcs': [
             {'VpcId': 'vpc-central-1'}
@@ -170,7 +165,7 @@ def ec2_sg_fixture(monkeypatch):
     }
     ec2['eu-central-1'].create_tags.return_value = None
     ec2['eu-west-1'].create_tags.return_value = None
-    install_fixture(monkeypatch, ec2)
+
     return ec2
 
 
@@ -767,3 +762,7 @@ def test_extend_security_groups_same_region(ec2_sg_fixture):
     actual = add_security_groups(cluster, from_region, region_rings)
     assert actual == expected
     assert observed_central_rules == []
+
+
+# def test_find_taupage_ami(ec2_taupage_fixture):
+#     assert False
