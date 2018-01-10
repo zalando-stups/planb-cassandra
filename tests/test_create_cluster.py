@@ -12,6 +12,7 @@ from planb.create_cluster import \
     add_security_groups, \
     add_subnets, \
     add_taken_private_ips, \
+    add_taupage_amis, \
     collect_seed_nodes, \
     create_user_data_for_ring, \
     create_user_data_template, \
@@ -123,6 +124,34 @@ def ec2_fixture(monkeypatch):
 
 
 @pytest.fixture
+def ec2_taupage_fixture(monkeypatch):
+    ec2_central = MagicMock()
+    ec2_central_ami1 = MagicMock()
+    ec2_central_ami1.id = 'ami-central-1'
+    ec2_central_ami1.name = 'taupage-central-1'
+    ec2_central_ami1.block_device_mappings = {}
+    ec2_central.images.filter.return_value = [ec2_central_ami1]
+
+    ec2_west = MagicMock()
+    ec2_west_ami1 = MagicMock()
+    ec2_west_ami1.id = 'ami-west-1'
+    ec2_west_ami1.name = 'taupage-west-1'
+    ec2_west_ami1.block_device_mappings = {}
+    ec2_west.images.filter.return_value = [ec2_west_ami1]
+
+    ec2 = {
+        'eu-central-1': ec2_central,
+        'eu-west-1': ec2_west
+    }
+
+    resource = MagicMock()
+    resource.side_effect = lambda _, region_name: ec2[region_name]
+    monkeypatch.setattr('boto3.resource', resource)
+
+    return ec2
+
+
+@pytest.fixture
 def ec2_sg_fixture(ec2_fixture):
     ec2 = ec2_fixture
 
@@ -169,14 +198,18 @@ def ec2_sg_fixture(ec2_fixture):
     return ec2
 
 
-def test_get_subnet_name():
-    subnet = {
-        'Tags': [{
-            'Key': 'Name',
-            'Value': 'test-subnet'
-        }]
-    }
-    assert get_subnet_name(subnet) == 'test-subnet'
+EU_CENTRAL_TAUPAGE_AMI = {
+    'id': 'ami-central-1',
+    'name': 'taupage-central-1',
+    'block_device_mappings': {}
+}
+
+
+EU_WEST_TAUPAGE_AMI = {
+    'id': 'ami-west-1',
+    'name': 'taupage-west-1',
+    'block_device_mappings': {}
+}
 
 
 EU_CENTRAL_SUBNETS = [
@@ -497,6 +530,16 @@ def test_collect_seed_nodes():
     assert set(collect_seed_nodes({'eu-central-1': eu_central})) == set(expected)
 
 
+def test_get_subnet_name():
+    subnet = {
+        'Tags': [{
+            'Key': 'Name',
+            'Value': 'test-subnet'
+        }]
+    }
+    assert get_subnet_name(subnet) == 'test-subnet'
+
+
 def test_create_user_data_template():
     cluster = {
         'name': 'hello-world',
@@ -593,14 +636,16 @@ def test_add_subnets(ec2_fixture):
     assert actual == expected
     
 
-def test_prepare_rings(ec2_fixture):
+def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
     expected = copy.deepcopy(REGION_RINGS)
     expected['eu-central-1'].update(
+        taupage_ami=EU_CENTRAL_TAUPAGE_AMI,
         subnets=EU_CENTRAL_SUBNETS,
         taken_ips=TAKEN_CENTRAL_IPS,
         nodes=PRIVATE_CENTRAL_NODES)
     expected['eu-west-1'].update(
+        taupage_ami=EU_WEST_TAUPAGE_AMI,
         subnets=EU_WEST_SUBNETS,
         taken_ips=TAKEN_WEST_IPS,
         nodes=PRIVATE_WEST_NODES)
@@ -764,5 +809,10 @@ def test_extend_security_groups_same_region(ec2_sg_fixture):
     assert observed_central_rules == []
 
 
-# def test_find_taupage_ami(ec2_taupage_fixture):
-#     assert False
+def test_add_taupage_amis(ec2_taupage_fixture):
+    region_rings = copy.deepcopy(REGION_RINGS)
+    expected = copy.deepcopy(REGION_RINGS)
+    expected['eu-central-1']['taupage_ami'] = EU_CENTRAL_TAUPAGE_AMI
+    expected['eu-west-1']['taupage_ami'] = EU_WEST_TAUPAGE_AMI
+    actual = add_taupage_amis(region_rings)
+    assert actual == expected

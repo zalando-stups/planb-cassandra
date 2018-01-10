@@ -135,8 +135,25 @@ def add_security_groups(
             for region_name, region in region_rings.items()}
 
 
-def find_taupage_ami(region_name: str) -> object:
-    pass
+# TODO: the user should be able to provide a specific image by ID
+def find_taupage_ami(region_name: str) -> dict:
+    # TODO: can we use our wrapped boto client here as well?
+    ec2 = boto3.resource('ec2', region_name)
+    filters = [
+        {'Name': 'name', 'Values': ['*Taupage-AMI-*']},
+        {'Name': 'is-public', 'Values': ['false']},
+        {'Name': 'state', 'Values': ['available']},
+        {'Name': 'root-device-type', 'Values': ['ebs']}
+    ]
+    images = list(ec2.images.filter(Filters=filters))
+    if not images:
+        raise Exception('No Taupage AMI found')
+    ami = sorted(images, key=lambda i: i.name)[-1]
+    return {
+        'id': ami.id,
+        'name': ami.name,
+        'block_device_mappings': ami.block_device_mappings
+    }
 
 
 def add_taupage_amis(region_rings: dict) -> dict:
@@ -145,25 +162,6 @@ def add_taupage_amis(region_rings: dict) -> dict:
     '''
     return {region_name: dict(region, taupage_ami=find_taupage_ami(region_name))
             for region_name, region in region_rings.items()}
-
-    result = {}
-    for region in regions:
-        with Action('Finding latest Taupage AMI in {}..'.format(region)):
-            # TODO: can we use our wrapped boto client here as well?
-            ec2 = boto3.resource('ec2', region)
-            filters = [
-                {'Name': 'name', 'Values': ['*Taupage-AMI-*']},
-                {'Name': 'is-public', 'Values': ['false']},
-                {'Name': 'state', 'Values': ['available']},
-                {'Name': 'root-device-type', 'Values': ['ebs']}
-            ]
-            images = list(ec2.images.filter(Filters=filters))
-            if not images:
-                raise Exception('No Taupage AMI found')
-            most_recent_image = sorted(images, key=lambda i: i.name)[-1]
-            result[region] = most_recent_image
-        info(most_recent_image.name)
-    return result
 
 
 def get_latest_docker_image_version(artifact_name):
@@ -767,7 +765,8 @@ def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
 
 def prepare_rings(region_rings: dict) -> dict:
     return thread_val(region_rings,
-                      [add_subnets,
+                      [add_taupage_amis,
+                       add_subnets,
                        add_taken_private_ips,
                        add_elastic_ips,
                        add_nodes_to_regions])
