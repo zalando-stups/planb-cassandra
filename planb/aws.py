@@ -129,12 +129,14 @@ def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> li
     return result
 
 
-def create_auto_recovery_alarm(region: str, cluster_name: str,
-                               instance_id: str, alarm_sns_topic_arn: str):
-    cw = boto_client('cloudwatch', region, profile_name='planb_autorecovery')
+def create_auto_recovery_alarm(
+        region_name: str, cluster_name: str, instance_id: str,
+        alarm_sns_topic_arn: str):
+
+    cw = boto_client('cloudwatch', region_name, profile_name='planb_autorecovery')
     alarm_name = '{}-{}-auto-recover'.format(cluster_name, instance_id)
 
-    alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region)]
+    alarm_actions = ['arn:aws:automate:{}:ec2:recover'.format(region_name)]
     if alarm_sns_topic_arn:
         alarm_actions.append(alarm_sns_topic_arn)
 

@@ -670,34 +670,34 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         # instance = resp['Instances'][0]
         # instance_id = instance['InstanceId']
 
-        ec2.create_tags(
-            Resources=[instance_id],
-            Tags=[{'Key': 'Name', 'Value': options['cluster_name']}]
-        )
-        # wait for instance to initialize before we can assign a
-        # public IP address to it or tag the attached volume
-        while True:
-            resp = ec2.describe_instances(InstanceIds=[instance_id])
-            instance = resp['Reservations'][0]['Instances'][0]
-            if instance['State']['Name'] != 'pending':
-                break
-            time.sleep(5)
-            act.progress()
+        # ec2.create_tags(
+        #     Resources=[instance_id],
+        #     Tags=[{'Key': 'Name', 'Value': options['cluster_name']}]
+        # )
+        # # wait for instance to initialize before we can assign a
+        # # public IP address to it or tag the attached volume
+        # while True:
+        #     resp = ec2.describe_instances(InstanceIds=[instance_id])
+        #     instance = resp['Reservations'][0]['Instances'][0]
+        #     if instance['State']['Name'] != 'pending':
+        #         break
+        #     time.sleep(5)
+        #     act.progress()
 
-        if options['use_dmz']:
-            ec2.associate_address(
-                InstanceId=instance_id,
-                AllocationId=ip['AllocationId']
-            )
+        # if options['use_dmz']:
+        #     ec2.associate_address(
+        #         InstanceId=instance_id,
+        #         AllocationId=ip['AllocationId']
+        #     )
 
         alarm_sns_topic_arn = None
         if options['alarm_topics']:
             alarm_sns_topic_arn = options['alarm_topics'][region]
 
-        create_auto_recovery_alarm(
-            region, options['cluster_name'],
-            instance_id, alarm_sns_topic_arn
-        )
+        # create_auto_recovery_alarm(
+        #     region, options['cluster_name'],
+        #     instance_id, alarm_sns_topic_arn
+        # )
 
 
 def launch_seed_nodes(options: dict):

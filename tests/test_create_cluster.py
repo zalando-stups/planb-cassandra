@@ -27,6 +27,8 @@ from planb.create_cluster import \
     seed_iterator, \
     volume_iterator
 
+from test_aws import install_boto_client_mock
+
 from test_common import dict_contains, list_just_contains_dicts
 
 
@@ -91,12 +93,6 @@ BOTO_WEST_SUBNETS = [
         'Tags': [{'Key': 'Name', 'Value': 'internal-eu-west-1c'}]
     }
 ]
-
-
-def install_boto_client_mock(monkeypatch, region_mock: dict):
-    client = MagicMock()
-    client.side_effect = lambda _, region_name: region_mock[region_name]
-    monkeypatch.setattr('planb.aws.boto_client', client)
 
 
 @pytest.fixture
