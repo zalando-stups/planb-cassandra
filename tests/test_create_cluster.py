@@ -234,21 +234,25 @@ EU_WEST_TAUPAGE_AMI = {
 EU_CENTRAL_SUBNETS = [
     {
         'id': 'subnet-central-1a-dmz',
+        'zone': 'eu-central-1a',
         'name': 'dmz-eu-central-1a',
         'cidr_block': '10.0.0.0/24'
     },
     {
         'id': 'subnet-central-1a',
+        'zone': 'eu-central-1a',
         'name': 'internal-eu-central-1a',
         'cidr_block': '172.31.0.0/24'
     },
     {
         'id': 'subnet-central-1b-dmz',
+        'zone': 'eu-central-1b',
         'name': 'dmz-eu-central-1b',
         'cidr_block': '10.10.0.0/24'
     },
     {
         'id': 'subnet-central-1b',
+        'zone': 'eu-central-1b',
         'name': 'internal-eu-central-1b',
         'cidr_block': '172.31.8.0/24'
     }
@@ -275,16 +279,19 @@ EU_WEST_SUBNETS = [
     # },
     {
         'id': 'subnet-west-1a',
+        'zone': 'eu-west-1a',
         'name': 'internal-eu-west-1a',
         'cidr_block': '172.31.100.0/24'
     },
     {
         'id': 'subnet-west-1b',
+        'zone': 'eu-west-1b',
         'name': 'internal-eu-west-1b',
         'cidr_block': '172.31.108.0/24',
     },
     {
         'id': 'subnet-west-1c',
+        'zone': 'eu-west-1c',
         'name': 'internal-eu-west-1c',
         'cidr_block': '172.31.116.0/24'
     }
@@ -312,33 +319,33 @@ PRIVATE_CENTRAL_NODES = [
     # 1st ring
     {'_defaultIp': '172.31.0.11',
      'PrivateIp': '172.31.0.11',
-     'subnet_id': 'subnet-central-1a',
+     'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'},
      'seed?': True},
     {'_defaultIp': '172.31.8.12',
      'PrivateIp': '172.31.8.12',
-     'subnet_id': 'subnet-central-1b',
+     'subnet': {'id': 'subnet-central-1b', 'zone': 'eu-central-1b'},
      'seed?': True},
     {'_defaultIp': '172.31.0.12',
      'PrivateIp': '172.31.0.12',
-     'subnet_id': 'subnet-central-1a',
+     'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'},
      'seed?': True},
     {'_defaultIp': '172.31.8.13',
      'PrivateIp': '172.31.8.13',
-     'subnet_id': 'subnet-central-1b',
+     'subnet': {'id': 'subnet-central-1b', 'zone': 'eu-central-1b'},
      'seed?': False},
     {'_defaultIp': '172.31.0.13',
      'PrivateIp': '172.31.0.13',
-     'subnet_id': 'subnet-central-1a',
+     'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'},
      'seed?': False},
 
     # 2nd ring starts where the 1st left
     {'_defaultIp': '172.31.8.14',
      'PrivateIp': '172.31.8.14',
-     'subnet_id': 'subnet-central-1b',
+     'subnet': {'id': 'subnet-central-1b', 'zone': 'eu-central-1b'},
      'seed?': True},
     {'_defaultIp': '172.31.0.14',
      'PrivateIp': '172.31.0.14',
-     'subnet_id': 'subnet-central-1a',
+     'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'},
      'seed?': True}
 ]
 
@@ -348,13 +355,13 @@ PUBLIC_CENTRAL_NODES = [
      'PrivateIp': '172.31.8.14',
      'PublicIp': '12.34',
      'AllocationId': 'a1',
-     'subnet_id': 'subnet-central-1b-dmz',
+     'subnet': {'id': 'subnet-central-1b-dmz', 'zone': 'eu-central-1b'},
      'seed?': True},
     {'_defaultIp': '56.78',
      'PrivateIp': '172.31.0.14',
      'PublicIp': '56.78',
      'AllocationId': 'a2',
-     'subnet_id': 'subnet-central-1a-dmz',
+     'subnet': {'id': 'subnet-central-1a-dmz', 'zone': 'eu-central-1a'},
      'seed?': True}
 ]
 
@@ -362,23 +369,23 @@ PUBLIC_CENTRAL_NODES = [
 PRIVATE_WEST_NODES = [
     {'_defaultIp': '172.31.100.12',
      'PrivateIp': '172.31.100.12',
-     'subnet_id': 'subnet-west-1a',
+     'subnet': {'id': 'subnet-west-1a', 'zone': 'eu-west-1a'},
      'seed?': True},
     {'_defaultIp': '172.31.108.11',
      'PrivateIp': '172.31.108.11',
-     'subnet_id': 'subnet-west-1b',
+     'subnet': {'id': 'subnet-west-1b', 'zone': 'eu-west-1b'},
      'seed?': True},
     {'_defaultIp': '172.31.116.12',
      'PrivateIp': '172.31.116.12',
-     'subnet_id': 'subnet-west-1c',
+     'subnet': {'id': 'subnet-west-1c', 'zone': 'eu-west-1c'},
      'seed?': True},
     {'_defaultIp': '172.31.100.13',
      'PrivateIp': '172.31.100.13',
-     'subnet_id': 'subnet-west-1a',
+     'subnet': {'id': 'subnet-west-1a', 'zone': 'eu-west-1a'},
      'seed?': False},
     {'_defaultIp': '172.31.108.12',
      'PrivateIp': '172.31.108.12',
-     'subnet_id': 'subnet-west-1b',
+     'subnet': {'id': 'subnet-west-1b', 'zone': 'eu-west-1b'},
      'seed?': False}
 ]
 
@@ -388,19 +395,19 @@ PUBLIC_WEST_NODES = [
      'PrivateIp': '172.31.100.12',
      'PublicIp': '34.12',
      'AllocationId': 'b1',
-     'subnet_id': 'subnet-west-1a-dmz',
+     'subnet': {'id': 'subnet-west-1a-dmz', 'zone': 'eu-west-1a'},
      'seed?': True},
     {'_defaultIp': '78.56',
      'PrivateIp': '172.31.108.11',
      'PublicIp': '78.56',
      'AllocationId': 'b2',
-     'subnet_id': 'subnet-west-1b-dmz',
+     'subnet': {'id': 'subnet-west-1b-dmz', 'zone': 'eu-west-1b'},
      'seed?': True},
     {'_defaultIp': '90.12',
      'PrivateIp': '172.31.116.12',
      'PublicIp': '90.12',
      'AllocationId': 'b3',
-     'subnet_id': 'subnet-west-1c-dmz',
+     'subnet': {'id': 'subnet-west-1c-dmz', 'zone': 'eu-west-1c'},
      'seed?': True},
 ]
 
@@ -415,6 +422,7 @@ def test_address_pool_depletion():
             subnets=[
                 {
                     'id': 'sn-1',
+                    'zone': 'local',
                     'name': 'internal-192-168-1',
                     'cidr_block': '192.168.1.0/30'
                 }
@@ -431,6 +439,7 @@ def test_address_pool_depletion():
         subnets=[
             {
                 'id': 'sn-2',
+                'zone': 'local',
                 'name': 'internal-10-0-0',
                 'cidr_block': '10.0.0.0/27'
             }
@@ -528,10 +537,18 @@ def test_get_region_ip_iterator_elastic_ips():
         for ignore in ignore_keys:
             del i[ignore]
     expected = [
-        {'_defaultIp': '51.1', 'AllocationId': 'a2', 'subnet_id': 'subnet-central-1a-dmz'},
-        {'_defaultIp': '51.3', 'AllocationId': 'a4', 'subnet_id': 'subnet-central-1b-dmz'},
-        {'_defaultIp': '51.5', 'AllocationId': 'a6', 'subnet_id': 'subnet-central-1a-dmz'},
-        {'_defaultIp': '51.7', 'AllocationId': 'a8', 'subnet_id': 'subnet-central-1b-dmz'}
+        {'_defaultIp': '51.1',
+         'AllocationId': 'a2',
+         'subnet': {'id': 'subnet-central-1a-dmz', 'zone': 'eu-central-1a'}},
+        {'_defaultIp': '51.3',
+         'AllocationId': 'a4',
+         'subnet': {'id': 'subnet-central-1b-dmz', 'zone': 'eu-central-1b'}},
+        {'_defaultIp': '51.5',
+         'AllocationId': 'a6',
+         'subnet': {'id': 'subnet-central-1a-dmz', 'zone': 'eu-central-1a'}},
+        {'_defaultIp': '51.7',
+         'AllocationId': 'a8',
+         'subnet': {'id': 'subnet-central-1b-dmz', 'zone': 'eu-central-1b'}}
     ]
     assert actual == expected
 
@@ -548,10 +565,14 @@ def test_get_region_ip_iterator_remove_taken_ip():
         for ignore in ignore_keys:
             del i[ignore]
     expected = [
-        {'_defaultIp': '172.31.0.11', 'subnet_id': 'subnet-central-1a'},
-        {'_defaultIp': '172.31.8.12', 'subnet_id': 'subnet-central-1b'},
-        {'_defaultIp': '172.31.0.12', 'subnet_id': 'subnet-central-1a'},
-        {'_defaultIp': '172.31.8.13', 'subnet_id': 'subnet-central-1b'}
+        {'_defaultIp': '172.31.0.11',
+         'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'}},
+        {'_defaultIp': '172.31.8.12',
+         'subnet': {'id': 'subnet-central-1b', 'zone': 'eu-central-1b'}},
+        {'_defaultIp': '172.31.0.12',
+         'subnet': {'id': 'subnet-central-1a', 'zone': 'eu-central-1a'}},
+        {'_defaultIp': '172.31.8.13',
+         'subnet': {'id': 'subnet-central-1b', 'zone': 'eu-central-1b'}}
     ]
     assert actual == expected
 
@@ -898,7 +919,7 @@ def test_launch_node(ec2_launch_fixture):
     }
     node = {
         'PrivateIp': '172.31.0.0',
-        'subnet_id': 'subnet-123',
+        'subnet': {'id': 'subnet-123', 'zone': 'eu-123'},
         'volume_name': 'test-cluster-172.31.0.0'
     }
     expected = 'i-central-123'

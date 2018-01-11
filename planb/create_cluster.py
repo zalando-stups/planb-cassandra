@@ -301,7 +301,7 @@ def get_region_ip_iterator(
             address['AllocationId'] = resp['AllocationId']
         else:
             address['_defaultIp'] = ip
-        address['subnet_id'] = subnet['id']
+        address['subnet'] = {'id': subnet['id'], 'zone': subnet['zone']}
         yield address
 
 
@@ -393,6 +393,7 @@ def get_region_subnets(region_name: str) -> list:
         key=lambda subnet: (subnet['AvailabilityZone'], subnet['CidrBlock'])
     )
     return [{'id': subnet['SubnetId'],
+             'zone': subnet['AvailabilityZone'],
              'name': get_subnet_name(subnet),
              'cidr_block': subnet['CidrBlock']}
             for subnet in sorted_subnets]
@@ -569,7 +570,7 @@ def launch_node(
         SecurityGroupIds=[region['security_group_id']],
         UserData=taupage_user_data,
         InstanceType=ring['instance_type'],
-        SubnetId=node['subnet_id'],
+        SubnetId=node['subnet']['id'],
         PrivateIpAddress=node['PrivateIp'],
         BlockDeviceMappings=block_device_mappings,
         IamInstanceProfile={'Arn': cluster['instance_profile']['Arn']},
