@@ -14,6 +14,7 @@ from planb.create_cluster import \
     add_taken_private_ips, \
     add_taupage_amis, \
     collect_seed_nodes, \
+    configure_launched_instance, \
     create_data_volume_for_node, \
     create_user_data_for_ring, \
     create_user_data_template, \
@@ -1047,3 +1048,41 @@ def test_launch_node(ec2_launch_fixture):
 
     actual = launch_node(cluster, 'eu-central-1', region, ring, node)
     assert actual == expected
+
+
+def test_configure_launched_instance(ec2_launch_fixture):
+    ec2 = ec2_launch_fixture
+
+    cluster = {
+        'name': 'test-cluster'
+    }
+    node = {
+        'instance_id': 'i-12345',
+        'PublicIp': '12.34',
+        'AllocationId': 'a1'
+    }
+
+    ec2['eu-central-1'].describe_instances.return_value = {
+        'Reservations': [
+            {
+                'Instances': [
+                    {
+                        'State': {
+                            'Name': 'running'
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    configure_launched_instance(cluster, 'eu-central-1', node)
+
+    ec2['eu-central-1'].create_tags.assert_called_once_with(
+        Resources=['i-12345'],
+        Tags=[{'Key': 'Name', 'Value': 'test-cluster'}]
+    )
+    ec2['eu-central-1'].associate_address.assert_called_once_with(
+        InstanceId='i-12345',
+        AllocationId='a1'
+    )

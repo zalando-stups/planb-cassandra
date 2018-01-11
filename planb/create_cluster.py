@@ -565,6 +565,7 @@ def create_data_volume_for_node(region_name: str, node: dict) -> str:
 
     return volume_id
 
+
 def launch_node(
         cluster: dict, region_name: str, region: dict, ring: dict,
         node: dict) -> str:
@@ -600,6 +601,33 @@ def launch_node(
     return resp['Instances'][0]['InstanceId']
 
 
+def configure_launched_instance(cluster: dict, region_name: str, node: dict):
+
+    instance_id = node['instance_id']
+
+    ec2 = aws.boto_client('ec2', region_name)
+    ec2.create_tags(
+        Resources=[instance_id],
+        Tags=[{'Key': 'Name', 'Value': cluster['name']}]
+    )
+
+    # wait for instance to initialize before we can assign a
+    # public IP address to it or tag the attached volume
+    while True:
+        resp = ec2.describe_instances(InstanceIds=[instance_id])
+        instance = resp['Reservations'][0]['Instances'][0]
+        if instance['State']['Name'] != 'pending':
+            break
+        time.sleep(5)
+        # TODO: act.progress()
+
+    if 'AllocationId' in node:
+        ec2.associate_address(
+            InstanceId=instance_id,
+            AllocationId=node['AllocationId']
+        )
+
+
 def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
                     security_group_id: str, is_seed: bool, options: dict):
 
@@ -612,35 +640,35 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
     with Action(msg) as act:
         ec2 = aws.boto_client('ec2', region)
 
-        mappings = prepare_block_device_mappings(ami.block_device_mappings)
+        # mappings = prepare_block_device_mappings(ami.block_device_mappings)
 
-        volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
-        create_tagged_volume(
-            ec2,
-            options,
-            subnet['AvailabilityZone'],
-            volume_name
-        )
+        # volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
+        # create_tagged_volume(
+        #     ec2,
+        #     options,
+        #     subnet['AvailabilityZone'],
+        #     volume_name
+        # )
 
-        user_data = options['user_data']
-        user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
-        taupage_user_data = dump_user_data_for_taupage(user_data)
+        # user_data = options['user_data']
+        # user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
+        # taupage_user_data = dump_user_data_for_taupage(user_data)
 
-        resp = ec2.run_instances(
-            ImageId=ami.id,
-            MinCount=1,
-            MaxCount=1,
-            SecurityGroupIds=[security_group_id],
-            UserData=taupage_user_data,
-            InstanceType=options['instance_type'],
-            SubnetId=subnet['SubnetId'],
-            PrivateIpAddress=ip['PrivateIp'],
-            BlockDeviceMappings=mappings,
-            IamInstanceProfile={'Arn': options['instance_profile']['Arn']},
-            DisableApiTermination=not(options['no_termination_protection'])
-        )
-        instance = resp['Instances'][0]
-        instance_id = instance['InstanceId']
+        # resp = ec2.run_instances(
+        #     ImageId=ami.id,
+        #     MinCount=1,
+        #     MaxCount=1,
+        #     SecurityGroupIds=[security_group_id],
+        #     UserData=taupage_user_data,
+        #     InstanceType=options['instance_type'],
+        #     SubnetId=subnet['SubnetId'],
+        #     PrivateIpAddress=ip['PrivateIp'],
+        #     BlockDeviceMappings=mappings,
+        #     IamInstanceProfile={'Arn': options['instance_profile']['Arn']},
+        #     DisableApiTermination=not(options['no_termination_protection'])
+        # )
+        # instance = resp['Instances'][0]
+        # instance_id = instance['InstanceId']
 
         ec2.create_tags(
             Resources=[instance_id],
@@ -899,7 +927,8 @@ def create_cluster(options: dict):
                 'volume': {
                     'type': options['volume_type'],
                     'size': options['volume_size'],
-                    'iops': options['volume_iops'],
+                    # TODO: validate parameters compatibility with volume type
+                    'iops': options['volume_iops']
                 },
                 'taupage_ami': None # TODO: let to override
             }]
