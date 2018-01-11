@@ -67,3 +67,9 @@ def test_happy_dict_contains(a, b):
 def test_sad_dict_contains(a, b):
     with pytest.raises(AssertionError):
         dict_contains(a, b)
+
+
+def list_just_contains_dicts(actual: list, expected: list) -> bool:
+    assert len(actual) == len(expected)
+    assert all(dict_contains(a, e) for a, e in zip(actual, expected))
+    return True

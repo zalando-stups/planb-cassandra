@@ -22,7 +22,10 @@ from planb.create_cluster import \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
-    seed_iterator
+    seed_iterator, \
+    volume_iterator
+
+from test_common import dict_contains, list_just_contains_dicts
 
 
 BOTO_CENTRAL_EIPS = [
@@ -263,9 +266,11 @@ EU_CENTRAL = {
     'rings': [
         {
             'size': 5,
+            'volume': 'vol-a'
         },
         {
             'size': 2,
+            'volume': 'vol-b'
         }
     ]
 }
@@ -303,6 +308,7 @@ EU_WEST = {
     'rings': [
         {
             'size': 5,
+            'volume': 'vol-c'
         }
     ]
 }
@@ -495,14 +501,14 @@ def test_add_elastic_ips(ec2_fixture):
     actual = add_elastic_ips(region_rings)
     assert actual == expected
 
-    
+
 def test_make_nodes_one_ring():
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
     actual = make_nodes(eu_west)
-    assert actual == PRIVATE_WEST_NODES
+    assert list_just_contains_dicts(actual, PRIVATE_WEST_NODES)
 
 
 def test_make_nodes_two_rings():
@@ -511,13 +517,50 @@ def test_make_nodes_two_rings():
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
     actual = make_nodes(eu_central)
-    assert actual == PRIVATE_CENTRAL_NODES
+    assert list_just_contains_dicts(actual, PRIVATE_CENTRAL_NODES)
+
+
+def test_make_nodes_respects_volume_info():
+    volume = {
+        'type': 'gp2'
+    }
+    eu_central = {
+        'dmz': False,
+        'rings': [
+            {
+                'size': 2,
+                'volume': volume
+            }
+        ],
+        'subnets': EU_CENTRAL_SUBNETS,
+        'taken_ips': TAKEN_CENTRAL_IPS
+    }
+    expected = [
+        {'volume': volume},
+        {'volume': volume}
+    ]
+    actual = make_nodes(eu_central)
+    assert list_just_contains_dicts(actual, expected)
 
 
 def test_seed_iterator():
     actual = list(seed_iterator(REGION_RINGS['eu-central-1']['rings']))
     expected = [True, True, True, False, False, True, True]
     assert actual == expected
+
+
+def test_volume_iterator():
+    rings = [
+        {'size': 2,
+         'volume': {'type': 'gp2'}},
+        {'size': 1,
+         'volume': {'type': 'io1'}},
+    ]
+    actual = list(volume_iterator(rings))
+    expected = [{'type': 'gp2'}, {'type': 'gp2'}, {'type': 'io1'}]
+    assert actual == expected
+    # require a deep copy
+    assert actual[0] is not actual[1]
 
 
 def test_get_region_ip_iterator_elastic_ips():
@@ -589,11 +632,18 @@ def test_add_nodes_to_regions():
     eu_west['elastic_ips'] = []
 
     expected = copy.deepcopy(region_rings)
-    expected['eu-central-1']['nodes'] = PRIVATE_CENTRAL_NODES
-    expected['eu-west-1']['nodes'] = PRIVATE_WEST_NODES
 
     actual = add_nodes_to_regions(region_rings)
-    assert actual == expected
+    assert set(actual.keys()) == set(expected.keys())
+    for k in expected.keys():
+        assert dict_contains(actual[k], expected[k])
+
+    assert list_just_contains_dicts(
+        actual['eu-central-1']['nodes'], PRIVATE_CENTRAL_NODES
+    )
+    assert list_just_contains_dicts(
+        actual['eu-west-1']['nodes'], PRIVATE_WEST_NODES
+    )
 
 
 def test_collect_seed_nodes():
@@ -718,15 +768,22 @@ def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
     expected['eu-central-1'].update(
         taupage_ami=EU_CENTRAL_TAUPAGE_AMI,
         subnets=EU_CENTRAL_SUBNETS,
-        taken_ips=TAKEN_CENTRAL_IPS,
-        nodes=PRIVATE_CENTRAL_NODES)
+        taken_ips=TAKEN_CENTRAL_IPS)
     expected['eu-west-1'].update(
         taupage_ami=EU_WEST_TAUPAGE_AMI,
         subnets=EU_WEST_SUBNETS,
-        taken_ips=TAKEN_WEST_IPS,
-        nodes=PRIVATE_WEST_NODES)
+        taken_ips=TAKEN_WEST_IPS)
     actual = prepare_rings(region_rings)
-    assert actual == expected
+    assert set(actual.keys()) == set(expected.keys())
+    for k in expected.keys():
+        assert dict_contains(actual[k], expected[k])
+
+    assert list_just_contains_dicts(
+        actual['eu-central-1']['nodes'], PRIVATE_CENTRAL_NODES
+    )
+    assert list_just_contains_dicts(
+        actual['eu-west-1']['nodes'], PRIVATE_WEST_NODES
+    )
 
 
 def test_create_security_groups(ec2_sg_fixture):
@@ -920,7 +977,9 @@ def test_launch_node(ec2_launch_fixture):
     node = {
         'PrivateIp': '172.31.0.0',
         'subnet': {'id': 'subnet-123', 'zone': 'eu-123'},
-        'volume_name': 'test-cluster-172.31.0.0'
+        'volume': {
+            'name': 'test-cluster-172.31.0.0'
+        }
     }
     expected = 'i-central-123'
     def check_run_instances(**kwargs):

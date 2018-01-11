@@ -251,6 +251,15 @@ def seed_iterator(rings: list) -> object:
             yield b
 
 
+def volume_iterator(rings: list) -> object:
+    """
+    For a list of rings returns an interator with `volume` of the ring.
+    """
+    for ring in rings:
+        for i in range(ring['size']):
+            yield copy.deepcopy(ring['volume'])
+
+
 class IpAddressPoolDepletedException(Exception):
 
     def __init__(self, cidr_block: str):
@@ -311,8 +320,10 @@ def make_nodes(region: dict) -> list:
         region.get('elastic_ips', []), region['dmz'])
     nodes = []
     seeds = seed_iterator(region['rings'])
-    for s, ip in zip(seeds, ipiter):
-        ip.update({'seed?': s})
+    volumes = volume_iterator(region['rings'])
+    for ip, s, v in zip(ipiter, seeds, volumes):
+        ip.update({'seed?': s,
+                   'volume': v})
         nodes.append(ip)
 
     return nodes
@@ -550,12 +561,15 @@ def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
 def launch_node(
         cluster: dict, region_name: str, region: dict, ring: dict,
         node: dict) -> str:
-
+    """
+    Starts an EC2 instance in `region` given the `node` parameters and returns
+    its InstanceId.
+    """
     ec2 = aws.boto_client('ec2', region_name)
 
     # add this node's EBS data volume to the user data
     user_data = copy.deepcopy(ring['user_data'])
-    user_data['volumes']['ebs']['/dev/xvdf'] = node['volume_name']
+    user_data['volumes']['ebs']['/dev/xvdf'] = node['volume']['name']
     taupage_user_data = dump_user_data_for_taupage(user_data)
 
     ami = region['taupage_ami']
@@ -875,9 +889,11 @@ def create_cluster(options: dict):
                 'dc_suffix': options['dc_suffix'],
                 'num_tokens': options['num_tokens'],
                 'instance_type': options['instance_type'],
-                'volume_type': options['volume_type'],
-                'volume_size': options['volume_size'],
-                'volume_iops': options['volume_iops'],
+                'volume': {
+                    'type': options['volume_type'],
+                    'size': options['volume_size'],
+                    'iops': options['volume_iops'],
+                },
                 'taupage_ami': None # TODO: let to override
             }]
         }
@@ -1007,9 +1023,11 @@ def extend_cluster(options: dict):
                 'dc_suffix': options['dc_suffix'],
                 'num_tokens': options['num_tokens'],
                 'instance_type': options['instance_type'],
-                'volume_type': options['volume_type'],
-                'volume_size': options['volume_size'],
-                'volume_iops': options['volume_iops'],
+                'volume': {
+                    'type': options['volume_type'],
+                    'size': options['volume_size'],
+                    'iops': options['volume_iops'],
+                },
                 'taupage_ami': None
             }]
         }
