@@ -41,3 +41,29 @@ def test_thread_val():
     c = lambda x: x - 1
     i = 1
     assert thread_val(i, [a, b, c]) == c(b(a(i)))
+
+
+def dict_contains(a: dict, b: dict) -> bool:
+    """
+    Checks that `a` contains `b` (`a` is superset of `b`).
+    Returns True or raises an AssertionError.
+    """
+    for k in b.keys():
+        assert k in a
+        assert a[k] == b[k]
+    return True
+
+
+@pytest.mark.parametrize("a,b", [({}, {}),
+                                 ({'a': 1}, {}),
+                                 ({'a': 1, 'c': 3}, {'a': 1})])
+def test_happy_dict_contains(a, b):
+    assert dict_contains(a, b)
+
+
+@pytest.mark.parametrize("a,b", [({'a': 1}, {'b': 2}),
+                                 ({'a': 1}, {'a': -100}),
+                                 ({}, {'b': 'hello!'})])
+def test_sad_dict_contains(a, b):
+    with pytest.raises(AssertionError):
+        dict_contains(a, b)
