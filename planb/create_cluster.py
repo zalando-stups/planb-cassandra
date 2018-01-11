@@ -540,23 +540,30 @@ def create_user_data_for_ring(template: dict, ring: dict, dmz: bool) -> dict:
     return data
 
 
-def create_tagged_volume(ec2: object, options: dict, zone: str, name: str):
+def create_data_volume_for_node(region_name: str, node: dict) -> str:
+    """
+    Returns the created volume's id.
+    """
     ebs_data = {
-        "AvailabilityZone": zone,
-        "VolumeType": options['volume_type'],
-        "Size": options['volume_size'],
-        "Encrypted": False,
+        "AvailabilityZone": node['subnet']['zone'],
+        "VolumeType": node['volume']['type'],
+        "Size": node['volume']['size'],
+        "Encrypted": False, # TODO: still required for auto-recovery?
     }
-    if options['volume_type'] == 'io1':
-        ebs_data['Iops'] = options['volume_iops']
+    if node['volume']['type'] == 'io1':
+        ebs_data['Iops'] = node['volume']['iops']
+
+    ec2 = aws.boto_client('ec2', region_name)
     vol = ec2.create_volume(**ebs_data)
+    volume_id = vol['VolumeId']
 
     tags = [
-        {'Key': 'Name', 'Value': name},
+        {'Key': 'Name', 'Value': node['volume']['name']},
         {'Key': 'Taupage:erase-on-boot', 'Value': 'True'}
     ]
-    ec2.create_tags(Resources=[vol['VolumeId']], Tags=tags)
+    ec2.create_tags(Resources=[volume_id], Tags=tags)
 
+    return volume_id
 
 def launch_node(
         cluster: dict, region_name: str, region: dict, ring: dict,

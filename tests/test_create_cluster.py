@@ -14,6 +14,7 @@ from planb.create_cluster import \
     add_taken_private_ips, \
     add_taupage_amis, \
     collect_seed_nodes, \
+    create_data_volume_for_node, \
     create_user_data_for_ring, \
     create_user_data_template, \
     get_region_ip_iterator, \
@@ -949,6 +950,45 @@ def test_add_taupage_amis(ec2_taupage_fixture):
     expected['eu-west-1']['taupage_ami'] = EU_WEST_TAUPAGE_AMI
     actual = add_taupage_amis(region_rings)
     assert actual == expected
+
+
+def test_create_data_volume(ec2_launch_fixture):
+    ec2 = ec2_launch_fixture
+
+    node = {
+        'volume': {
+            'type': 'gp2',
+            'size': '10',
+            'name': 'test-cluster-vol111'
+        },
+        'subnet': {
+            'zone': 'eu-central-1x'
+        }
+    }
+
+    expected = 'vol-123'
+    def check_create_volume(**kwargs):
+        assert kwargs == {
+            'AvailabilityZone': 'eu-central-1x',
+            'VolumeType': 'gp2',
+            'Size': '10',
+            'Encrypted': False
+        }
+        return {
+            'VolumeId': expected
+        }
+    ec2['eu-central-1'].create_volume.side_effect = check_create_volume
+
+    actual = create_data_volume_for_node('eu-central-1', node)
+    assert actual == expected
+
+    ec2['eu-central-1'].create_tags.assert_called_once_with(
+        Resources=[expected],
+        Tags=[
+            {'Key': 'Name', 'Value': 'test-cluster-vol111'},
+            {'Key': 'Taupage:erase-on-boot', 'Value': 'True'}
+        ]
+    )
 
 
 def test_launch_node(ec2_launch_fixture):
