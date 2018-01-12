@@ -24,8 +24,7 @@ from planb.create_cluster import \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
-    seed_iterator, \
-    volume_iterator
+    seed_iterator
 
 from test_aws import install_boto_client_mock
 
@@ -505,7 +504,8 @@ def test_make_nodes_one_ring():
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
-    actual = make_nodes(eu_west)
+    node_template = {}
+    actual = make_nodes(node_template, eu_west)
     assert list_just_contains_dicts(actual, PRIVATE_WEST_NODES)
 
 
@@ -514,30 +514,30 @@ def test_make_nodes_two_rings():
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
-    actual = make_nodes(eu_central)
+    node_template = {}
+    actual = make_nodes(node_template, eu_central)
     assert list_just_contains_dicts(actual, PRIVATE_CENTRAL_NODES)
 
 
-def test_make_nodes_respects_volume_info():
-    volume = {
-        'type': 'gp2'
-    }
+def test_make_nodes_with_template():
     eu_central = {
         'dmz': False,
         'rings': [
             {
-                'size': 2,
-                'volume': volume
+                'size': 2
             }
         ],
         'subnets': EU_CENTRAL_SUBNETS,
         'taken_ips': TAKEN_CENTRAL_IPS
     }
-    expected = [
-        {'volume': volume},
-        {'volume': volume}
-    ]
-    actual = make_nodes(eu_central)
+    node_template = {
+        'instance_type': 't2.atto',
+        'volume': {
+            'type': 'gp2'
+        }
+    }
+    expected = [node_template, node_template]
+    actual = make_nodes(node_template, eu_central)
     assert list_just_contains_dicts(actual, expected)
 
 
@@ -545,20 +545,6 @@ def test_seed_iterator():
     actual = list(seed_iterator(REGION_RINGS['eu-central-1']['rings']))
     expected = [True, True, True, False, False, True, True]
     assert actual == expected
-
-
-def test_volume_iterator():
-    rings = [
-        {'size': 2,
-         'volume': {'type': 'gp2'}},
-        {'size': 1,
-         'volume': {'type': 'io1'}},
-    ]
-    actual = list(volume_iterator(rings))
-    expected = [{'type': 'gp2'}, {'type': 'gp2'}, {'type': 'io1'}]
-    assert actual == expected
-    # require a deep copy
-    assert actual[0] is not actual[1]
 
 
 def test_get_region_ip_iterator_elastic_ips():
@@ -628,10 +614,10 @@ def test_add_nodes_to_regions():
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
     eu_west['elastic_ips'] = []
-
+    node_template = {}
     expected = copy.deepcopy(region_rings)
 
-    actual = add_nodes_to_regions(region_rings)
+    actual = add_nodes_to_regions(node_template, region_rings)
     assert set(actual.keys()) == set(expected.keys())
     for k in expected.keys():
         assert dict_contains(actual[k], expected[k])
@@ -762,6 +748,7 @@ def test_add_subnets(ec2_fixture):
 
 def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
+    node_template = {}
     expected = copy.deepcopy(REGION_RINGS)
     expected['eu-central-1'].update(
         taupage_ami=EU_CENTRAL_TAUPAGE_AMI,
@@ -771,7 +758,7 @@ def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
         taupage_ami=EU_WEST_TAUPAGE_AMI,
         subnets=EU_WEST_SUBNETS,
         taken_ips=TAKEN_WEST_IPS)
-    actual = prepare_rings(region_rings)
+    actual = prepare_rings(node_template, region_rings)
     assert set(actual.keys()) == set(expected.keys())
     for k in expected.keys():
         assert dict_contains(actual[k], expected[k])
@@ -996,15 +983,13 @@ def test_launch_node(ec2_launch_fixture):
         'instance_profile': {
             'Arn': 'arn:test-instance-profile'
         },
-        'protect_from_termination': False
     }
     region = {
         'taupage_ami': EU_CENTRAL_TAUPAGE_AMI,
         'security_group_id': 'sg-central-1'
     }
     ring = {
-        'instance_type': 't2.nano',
-        'user_data': {
+        'user_data_template': {
             'volumes': {
                 'ebs': {
                 }
@@ -1014,9 +999,11 @@ def test_launch_node(ec2_launch_fixture):
     node = {
         'PrivateIp': '172.31.0.0',
         'subnet': {'id': 'subnet-123', 'zone': 'eu-123'},
+        'instance_type': 't2.nano',
         'volume': {
             'name': 'test-cluster-172.31.0.0'
-        }
+        },
+        'protect_from_termination': False
     }
     expected = 'i-central-123'
     def check_run_instances(**kwargs):

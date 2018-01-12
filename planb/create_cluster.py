@@ -251,15 +251,6 @@ def seed_iterator(rings: list) -> object:
             yield b
 
 
-def volume_iterator(rings: list) -> object:
-    """
-    For a list of rings returns an interator with `volume` of the ring.
-    """
-    for ring in rings:
-        for i in range(ring['size']):
-            yield copy.deepcopy(ring['volume'])
-
-
 class IpAddressPoolDepletedException(Exception):
 
     def __init__(self, cidr_block: str):
@@ -314,23 +305,23 @@ def get_region_ip_iterator(
         yield address
 
 
-def make_nodes(region: dict) -> list:
+def make_nodes(node_template: dict, region: dict) -> list:
     ipiter = get_region_ip_iterator(
         region['subnets'], region['taken_ips'],
         region.get('elastic_ips', []), region['dmz'])
     nodes = []
     seeds = seed_iterator(region['rings'])
-    volumes = volume_iterator(region['rings'])
-    for ip, s, v in zip(ipiter, seeds, volumes):
-        ip.update({'seed?': s,
-                   'volume': v})
-        nodes.append(ip)
+    for ip, s in zip(ipiter, seeds):
+        node = copy.deepcopy(node_template)
+        node.update(**ip)
+        node.update({'seed?': s})
+        nodes.append(node)
 
     return nodes
 
 
-def add_nodes_to_regions(region_rings: dict) -> dict:
-    return {region_name: dict(region, nodes=make_nodes(region))
+def add_nodes_to_regions(node_template: dict, region_rings: dict) -> dict:
+    return {region_name: dict(region, nodes=make_nodes(node_template, region))
             for region_name, region in region_rings.items()}
 
 
@@ -576,7 +567,7 @@ def launch_node(
     ec2 = aws.boto_client('ec2', region_name)
 
     # add this node's EBS data volume to the user data
-    user_data = copy.deepcopy(ring['user_data'])
+    user_data = copy.deepcopy(ring['user_data_template'])
     user_data['volumes']['ebs']['/dev/xvdf'] = node['volume']['name']
     taupage_user_data = dump_user_data_for_taupage(user_data)
 
@@ -591,12 +582,12 @@ def launch_node(
         MaxCount=1,
         SecurityGroupIds=[region['security_group_id']],
         UserData=taupage_user_data,
-        InstanceType=ring['instance_type'],
+        InstanceType=node['instance_type'],
         SubnetId=node['subnet']['id'],
         PrivateIpAddress=node['PrivateIp'],
         BlockDeviceMappings=block_device_mappings,
         IamInstanceProfile={'Arn': cluster['instance_profile']['Arn']},
-        DisableApiTermination=cluster['protect_from_termination']
+        DisableApiTermination=node['protect_from_termination']
     )
     return resp['Instances'][0]['InstanceId']
 
@@ -698,6 +689,11 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         #     region, options['cluster_name'],
         #     instance_id, alarm_sns_topic_arn
         # )
+
+
+#def launch_seed_nodes(
+#        cluster: dict, region_name: str, region: dict, ring: dict, nodes: list):
+#    pass
 
 
 def launch_seed_nodes(options: dict):
@@ -850,13 +846,13 @@ def add_cluster_instance_profile(cluster: dict) -> dict:
                 instance_profile=ensure_instance_profile(cluster['name']))
 
 
-def prepare_rings(region_rings: dict) -> dict:
+def prepare_rings(node_template: dict, region_rings: dict) -> dict:
     return thread_val(region_rings,
                       [add_taupage_amis,
                        add_subnets,
                        add_taken_private_ips,
                        add_elastic_ips,
-                       add_nodes_to_regions])
+                       (lambda rr: add_nodes_to_regions(node_template, rr))])
 
 
 def add_user_data_to_rings(
@@ -879,9 +875,10 @@ def add_user_data_to_region_rings(
             for region_name, region in region_rings.items()}
 
 
-def create_rings(cluster: dict, from_region: str, region_rings: dict):
+def create_rings(
+        cluster: dict, node_template: dict,from_region: str, region_rings: dict):
 
-    region_rings = prepare_rings(region_rings)
+    region_rings = prepare_rings(node_template, region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
 
     # IAM instance profiles are global (vs. per-region)
@@ -893,7 +890,8 @@ def create_rings(cluster: dict, from_region: str, region_rings: dict):
         cluster = add_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster, region_rings)
 
-    region_rings = add_user_data_to_region_rings(region_rings, user_data_template)
+    #region_rings = add_user_data_to_region_rings(region_rings, user_data_template)
+    cluster = dict(cluster, user_data_template=user_data_template)
 
     # TODO: consider starting all seed nodes from all rings first, then normal ones
     # *** launch seed nodes
@@ -908,34 +906,41 @@ def create_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
         'dmz': options['use_dmz'],
+        'hosted_zone': options['hosted_zone']
+    }
+    node_template = {
         'protect_from_termination': not(options['no_termination_protection']),
-        'hosted_zone': options['hosted_zone'],
         'scalyr_region': options['scalyr_region'],
         'scalyr_key': options['scalyr_key'],
         'docker_image': options['docker_image'], # TODO: resolve using artifact name
         'environment': options['environment'],
         'sns_topic': options['sns_topic'],
-        'sns_email': options['sns_email']
+        'sns_email': options['sns_email'],
+        'instance_type': options['instance_type'],
+        # TODO: flatten back the volume params?
+        'volume': {
+            'type': options['volume_type'],
+            'size': options['volume_size'],
+            # TODO: validate parameters compatibility with volume type
+            'iops': options['volume_iops']
+        }
     }
     region_rings = {
         region: {
-            'rings': [{
-                'size': options['cluster_size'],
-                'dc_suffix': options['dc_suffix'],
-                'num_tokens': options['num_tokens'],
-                'instance_type': options['instance_type'],
-                'volume': {
-                    'type': options['volume_type'],
-                    'size': options['volume_size'],
-                    # TODO: validate parameters compatibility with volume type
-                    'iops': options['volume_iops']
-                },
-                'taupage_ami': None # TODO: let to override
-            }]
+            'taupage_ami': None, # TODO: let to override
+            'rings': [
+                {
+                    'size': options['cluster_size'],
+                    'dc_suffix': options['dc_suffix'],
+                    'num_tokens': options['num_tokens']
+                }
+            ]
         }
         for region in options['regions']
     }
-    create_rings(cluster, from_region=None, region_rings=region_rings)
+    create_rings(
+        cluster, node_template, from_region=None, region_rings=region_rings
+    )
 
 ################################################################################
 # old implementation
@@ -1043,33 +1048,38 @@ def extend_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
         'dmz': options['use_dmz'],
+        'hosted_zone': options['hosted_zone']
+    }
+    node_template = {
         'protect_from_termination': not(options['no_termination_protection']),
-        'hosted_zone': options['hosted_zone'],
         'scalyr_region': options['scalyr_region'],
         'scalyr_key': options['scalyr_key'],
         'docker_image': options['docker_image'], # TODO: resolve using artifact name
         'environment': options['environment'],
         'sns_topic': options['sns_topic'],
-        'sns_email': options['sns_email']
+        'sns_email': options['sns_email'],
+        'instance_type': options['instance_type'],
+        'volume': {
+            'type': options['volume_type'],
+            'size': options['volume_size'],
+            'iops': options['volume_iops'],
+        }
     }
     region_rings = {
         options['to_region']: {
-            'rings': [{
-                'size': options['ring_size'],
-                'dc_suffix': options['dc_suffix'],
-                'num_tokens': options['num_tokens'],
-                'instance_type': options['instance_type'],
-                'volume': {
-                    'type': options['volume_type'],
-                    'size': options['volume_size'],
-                    'iops': options['volume_iops'],
-                },
-                'taupage_ami': None
-            }]
+            'taupage_ami': None,
+            'rings': [
+                {
+                    'size': options['ring_size'],
+                    'dc_suffix': options['dc_suffix'],
+                    'num_tokens': options['num_tokens'],
+                }
+            ]
         }
     }
     create_rings(
-        cluster, from_region=options['from_region'], region_rings=region_rings
+        cluster, node_template,
+        from_region=options['from_region'], region_rings=region_rings
     )
 
 ################################################################################
