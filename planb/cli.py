@@ -23,12 +23,14 @@ def validate_cluster_name(ctx, param, value):
     cluster_name_re = '^[a-z][a-z0-9-]{4,}[a-z0-9]$'
     if not re.match(cluster_name_re, value):
         raise click.BadParameter("has to match the regexp: {}".format(cluster_name_re))
+    return value
 
 
 def validate_dc_suffix(ctx, param, value):
     dc_suffix_re = '^[_a-z0-9-]*$'
     if not re.match(dc_suffix_re, value):
         raise click.BadParameter("has to match the regexp: {}".format(dc_suffix_re))
+    return value
 
 
 @click.group()
