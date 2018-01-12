@@ -1,8 +1,9 @@
 import pytest
+import copy
 
 from unittest.mock import MagicMock
 
-from planb.aws import create_auto_recovery_alarm
+from planb.aws import add_sns_topics_for_alarm, create_auto_recovery_alarm
 
 
 def install_boto_client_mock(monkeypatch, region_mock: dict):
@@ -11,16 +12,54 @@ def install_boto_client_mock(monkeypatch, region_mock: dict):
     monkeypatch.setattr('planb.aws.boto_client', client)
 
 
-def test_create_auto_recovery_alarm(monkeypatch):
-    ec2_central = MagicMock()
-    ec2 = {
-        'eu-central-1': ec2_central
+@pytest.fixture
+def base_fixture(monkeypatch):
+    eu_central = MagicMock()
+    eu_west = MagicMock()
+    mock = {
+        'eu-central-1': eu_central,
+        'eu-west-1': eu_west
     }
-    install_boto_client_mock(monkeypatch, ec2)
+    install_boto_client_mock(monkeypatch, mock)
+    return mock
 
+
+def test_setup_sns(base_fixture):
+    regions = {
+        'eu-central-1': {
+            'some': 'data'
+        },
+        'eu-west-1': {
+            'other': 'stuff'
+        }
+    }
+    base_fixture['eu-central-1'].create_topic.return_value = {
+        'TopicArn': 'arn:central'
+    }
+    base_fixture['eu-west-1'].create_topic.return_value = {
+        'TopicArn': 'arn:west'
+    }
+    expected = copy.deepcopy(regions)
+    expected['eu-central-1']['alarm_sns_topic_arn'] = 'arn:central'
+    expected['eu-west-1']['alarm_sns_topic_arn'] = 'arn:west'
+    actual = add_sns_topics_for_alarm(regions, 'xxx', 'xxx@zzz.com')
+    assert actual == expected
+
+    base_fixture['eu-central-1'].subscribe.assert_called_once_with(
+        TopicArn='arn:central',
+        Protocol='email',
+        Endpoint='xxx@zzz.com'
+    )
+    base_fixture['eu-west-1'].subscribe.assert_called_once_with(
+        TopicArn='arn:west',
+        Protocol='email',
+        Endpoint='xxx@zzz.com'
+    )
+
+def test_create_auto_recovery_alarm(base_fixture):
     create_auto_recovery_alarm('eu-central-1', 'test-cluster', 'i-1234', 'sns-arn')
 
-    ec2_central.put_metric_alarm.assert_called_once_with(
+    base_fixture['eu-central-1'].put_metric_alarm.assert_called_once_with(
         AlarmName='test-cluster-i-1234-auto-recover',
         AlarmActions=['arn:aws:automate:eu-central-1:ec2:recover', 'sns-arn'],
         MetricName='StatusCheckFailed_System',

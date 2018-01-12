@@ -983,18 +983,16 @@ def test_launch_node(ec2_launch_fixture):
         'instance_profile': {
             'Arn': 'arn:test-instance-profile'
         },
-    }
-    region = {
-        'taupage_ami': EU_CENTRAL_TAUPAGE_AMI,
-        'security_group_id': 'sg-central-1'
-    }
-    ring = {
         'user_data_template': {
             'volumes': {
                 'ebs': {
                 }
             }
         }
+    }
+    region = {
+        'taupage_ami': EU_CENTRAL_TAUPAGE_AMI,
+        'security_group_id': 'sg-central-1'
     }
     node = {
         'PrivateIp': '172.31.0.0',
@@ -1029,7 +1027,7 @@ def test_launch_node(ec2_launch_fixture):
         }
     ec2['eu-central-1'].run_instances.side_effect = check_run_instances
 
-    actual = launch_node(cluster, 'eu-central-1', region, ring, node)
+    actual = launch_node(cluster, 'eu-central-1', region, node)
     assert actual == expected
 
 
@@ -1038,6 +1036,9 @@ def test_configure_launched_instance(ec2_launch_fixture):
 
     cluster = {
         'name': 'test-cluster'
+    }
+    region = {
+        'alarm_sns_topic_arn': 'xxx'
     }
     node = {
         'instance_id': 'i-12345',
@@ -1059,7 +1060,7 @@ def test_configure_launched_instance(ec2_launch_fixture):
         ]
     }
 
-    configure_launched_instance(cluster, 'eu-central-1', node)
+    configure_launched_instance(cluster, 'eu-central-1', region, node)
 
     ec2['eu-central-1'].create_tags.assert_called_once_with(
         Resources=['i-12345'],
@@ -1069,3 +1070,4 @@ def test_configure_launched_instance(ec2_launch_fixture):
         InstanceId='i-12345',
         AllocationId='a1'
     )
+    ec2['eu-central-1'].put_metric_alarm.assert_called_once()

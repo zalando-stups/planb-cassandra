@@ -114,19 +114,21 @@ def fetch_user_data(ec2: object, instance_id: str) -> str:
     return resp['UserData']['Value']
 
 
-def setup_sns_topics_for_alarm(regions: list, topic_name: str, email: str) -> list:
+def add_sns_topics_for_alarm(regions: dict, topic_name: str, email: str) -> dict:
     if not(topic_name):
         topic_name = 'planb-cassandra-system-event'
 
-    result = {}
-    for region in regions:
-        sns = boto_client('sns', region)
+    def create_topic(region_name: str) -> str:
+        sns = boto_client('sns', region_name)
         resp = sns.create_topic(Name=topic_name)
         topic_arn = resp['TopicArn']
         if email:
             sns.subscribe(TopicArn=topic_arn, Protocol='email', Endpoint=email)
-        result[region] = topic_arn
-    return result
+        return topic_arn
+
+    return {region_name: dict(region,
+                              alarm_sns_topic_arn=create_topic(region_name))
+            for region_name, region in regions.items()}
 
 
 def create_auto_recovery_alarm(

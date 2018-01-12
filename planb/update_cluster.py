@@ -12,7 +12,7 @@ import os
 # TODO: can we avoid the explicit list here?
 from .aws import boto_client, \
     list_instances, fetch_user_data, \
-    setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
+    add_sns_topics_for_alarm, create_auto_recovery_alarm, \
     ensure_instance_profile
 
 from .common import dump_dict_as_file, load_dict_from_file, \
@@ -518,10 +518,9 @@ def update_cluster(options: dict):
         return
 
     if options['sns_topic'] or options['sns_email']:
-        # a list of the only region we act on now
-        regions = [options['region']]
-        alarm_topics = setup_sns_topics_for_alarm(
-            regions,
+        region = options['region']
+        alarm_topics = add_sns_topics_for_alarm(
+            {region: {}}, # TODO: !!!
             options['sns_topic'],
             options['sns_email']
         )

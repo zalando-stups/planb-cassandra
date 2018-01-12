@@ -22,7 +22,7 @@ from clickclick import Action, info
 
 import planb.aws as aws
 from .aws import list_instances, fetch_user_data, \
-    setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
+    add_sns_topics_for_alarm, create_auto_recovery_alarm, \
     ensure_instance_profile
 
 from .common import prepare_block_device_mappings, \
@@ -306,10 +306,10 @@ def get_region_ip_iterator(
 
 
 def make_nodes(node_template: dict, region: dict) -> list:
+    nodes = []
     ipiter = get_region_ip_iterator(
         region['subnets'], region['taken_ips'],
         region.get('elastic_ips', []), region['dmz'])
-    nodes = []
     seeds = seed_iterator(region['rings'])
     for ip, s in zip(ipiter, seeds):
         node = copy.deepcopy(node_template)
@@ -558,8 +558,7 @@ def create_data_volume_for_node(region_name: str, node: dict) -> str:
 
 
 def launch_node(
-        cluster: dict, region_name: str, region: dict, ring: dict,
-        node: dict) -> str:
+        cluster: dict, region_name: str, region: dict, node: dict) -> str:
     """
     Starts an EC2 instance in `region` given the `node` parameters and returns
     its InstanceId.
@@ -567,7 +566,7 @@ def launch_node(
     ec2 = aws.boto_client('ec2', region_name)
 
     # add this node's EBS data volume to the user data
-    user_data = copy.deepcopy(ring['user_data_template'])
+    user_data = copy.deepcopy(cluster['user_data_template'])
     user_data['volumes']['ebs']['/dev/xvdf'] = node['volume']['name']
     taupage_user_data = dump_user_data_for_taupage(user_data)
 
@@ -592,7 +591,8 @@ def launch_node(
     return resp['Instances'][0]['InstanceId']
 
 
-def configure_launched_instance(cluster: dict, region_name: str, node: dict):
+def configure_launched_instance(
+        cluster: dict, region_name: str, region: dict, node: dict):
 
     instance_id = node['instance_id']
 
@@ -618,123 +618,40 @@ def configure_launched_instance(cluster: dict, region_name: str, node: dict):
             AllocationId=node['AllocationId']
         )
 
-
-def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
-                    security_group_id: str, is_seed: bool, options: dict):
-
-    node_type = 'SEED' if is_seed else 'NORMAL'
-    msg = 'Launching {} node {} in {}..'.format(
-        node_type,
-        ip['_defaultIp'],
-        region
+    create_auto_recovery_alarm(
+        region_name, cluster['name'], instance_id, region['alarm_sns_topic_arn']
     )
-    with Action(msg) as act:
-        ec2 = aws.boto_client('ec2', region)
-
-        # mappings = prepare_block_device_mappings(ami.block_device_mappings)
-
-        # volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
-        # create_tagged_volume(
-        #     ec2,
-        #     options,
-        #     subnet['AvailabilityZone'],
-        #     volume_name
-        # )
-
-        # user_data = options['user_data']
-        # user_data['volumes']['ebs']['/dev/xvdf'] = volume_name
-        # taupage_user_data = dump_user_data_for_taupage(user_data)
-
-        # resp = ec2.run_instances(
-        #     ImageId=ami.id,
-        #     MinCount=1,
-        #     MaxCount=1,
-        #     SecurityGroupIds=[security_group_id],
-        #     UserData=taupage_user_data,
-        #     InstanceType=options['instance_type'],
-        #     SubnetId=subnet['SubnetId'],
-        #     PrivateIpAddress=ip['PrivateIp'],
-        #     BlockDeviceMappings=mappings,
-        #     IamInstanceProfile={'Arn': options['instance_profile']['Arn']},
-        #     DisableApiTermination=not(options['no_termination_protection'])
-        # )
-        # instance = resp['Instances'][0]
-        # instance_id = instance['InstanceId']
-
-        # ec2.create_tags(
-        #     Resources=[instance_id],
-        #     Tags=[{'Key': 'Name', 'Value': options['cluster_name']}]
-        # )
-        # # wait for instance to initialize before we can assign a
-        # # public IP address to it or tag the attached volume
-        # while True:
-        #     resp = ec2.describe_instances(InstanceIds=[instance_id])
-        #     instance = resp['Reservations'][0]['Instances'][0]
-        #     if instance['State']['Name'] != 'pending':
-        #         break
-        #     time.sleep(5)
-        #     act.progress()
-
-        # if options['use_dmz']:
-        #     ec2.associate_address(
-        #         InstanceId=instance_id,
-        #         AllocationId=ip['AllocationId']
-        #     )
-
-        alarm_sns_topic_arn = None
-        if options['alarm_topics']:
-            alarm_sns_topic_arn = options['alarm_topics'][region]
-
-        # create_auto_recovery_alarm(
-        #     region, options['cluster_name'],
-        #     instance_id, alarm_sns_topic_arn
-        # )
 
 
-#def launch_seed_nodes(
-#        cluster: dict, region_name: str, region: dict, ring: dict, nodes: list):
-#    pass
+def launch_seed_nodes(
+        cluster: dict, region_name: str, region: dict, nodes: list):
+
+    seed_nodes = [n for n in nodes if n['seed?']]
+    for node in seed_nodes:
+        msg = "Launching SEED node {} in {}...".format(
+            node['_defaultIp'], region_name
+        )
+        with Action(msg) as act:
+            instance_id = launch_node(cluster, region_name, region, ring, node)
+            node['instance_id'] = instance_id
+            configure_launched_instance(cluster, region_name, node)
+        time.sleep(60)
 
 
-def launch_seed_nodes(options: dict):
-    total_seed_count = options['seed_count'] * len(options['regions'])
-    seeds_launched = 0
-    for region, ips in options['seed_nodes'].items():
-        security_group_id = options['security_groups'][region]['GroupId']
-        subnets = options['subnets'][region]
-        for i, ip in enumerate(ips):
-            launch_instance(
-                region, ip,
-                ami=options['taupage_amis'][region],
-                subnet=subnets[i % len(subnets)],
-                security_group_id=security_group_id,
-                is_seed=True,
-                options=options
-            )
-            seeds_launched += 1
-            if seeds_launched < total_seed_count:
-                info("Sleeping for a minute before launching next SEED node..")
-                time.sleep(60)
+def launch_normal_nodes(
+        cluster: dict, region_name: str, region: dict, ring: dict, nodes: list):
 
-
-def launch_normal_nodes(options: dict):
-    # TODO: parallelize by region?
-    for region, ips in options['node_ips'].items():
-        subnets = options['subnets'][region]
-        security_group_id = options['security_groups'][region]['GroupId']
-        for i, ip in enumerate(ips):
-            if i >= options['seed_count']:
-                # avoid stating all nodes at the same time
-                info("Sleeping for one minute before launching next node..")
-                time.sleep(60)
-                launch_instance(
-                    region, ip,
-                    ami=options['taupage_amis'][region],
-                    subnet=subnets[i % len(subnets)],
-                    security_group_id=security_group_id,
-                    is_seed=False,
-                    options=options
-                )
+    normal_nodes = [n for n in nodes if not n['seed?']]
+    for node in normal_nodes:
+        time.sleep(60)
+        msg = "Launching node {} in {}...".format(
+            node['_defaultIp'], region_name
+        )
+        with Action(msg) as act:
+            # TODO: duplicated 3 lines
+            instance_id = launch_node(cluster, region_name, region, ring, node)
+            node['instance_id'] = instance_id
+            configure_launched_instance(cluster, region_name, node)
 
 
 def print_success_message(options: dict):
@@ -855,31 +772,17 @@ def prepare_rings(node_template: dict, region_rings: dict) -> dict:
                        (lambda rr: add_nodes_to_regions(node_template, rr))])
 
 
-def add_user_data_to_rings(
-        rings: list, user_data_template: dict, dmz: bool) -> list:
-
-    return [dict(r,
-                 user_data=create_user_data_for_ring(user_data_template, r, dmz))
-            for r in rings]
-
-
-def add_user_data_to_region_rings(
-        region_rings: dict, user_data_template: dict) -> dict:
-
-    return {region_name: dict(region,
-                              rings=add_user_data_to_rings(
-                                  region['rings'],
-                                  user_data_template,
-                                  region['dmz']
-                              ))
-            for region_name, region in region_rings.items()}
-
-
 def create_rings(
         cluster: dict, node_template: dict,from_region: str, region_rings: dict):
 
     region_rings = prepare_rings(node_template, region_rings)
+
     region_rings = add_security_groups(cluster, from_region, region_rings)
+
+    if cluster['sns_topic'] or cluster['sns_email']:
+        region_rings = add_sns_topics_for_alarm(
+            region_rings, cluster['sns_topic'], cluster['sns_email']
+        )
 
     # IAM instance profiles are global (vs. per-region)
     cluster = add_cluster_instance_profile(cluster)
@@ -890,12 +793,14 @@ def create_rings(
         cluster = add_cluster_secuirty_features(cluster)
         user_data_template = create_user_data_template(cluster, region_rings)
 
-    #region_rings = add_user_data_to_region_rings(region_rings, user_data_template)
     cluster = dict(cluster, user_data_template=user_data_template)
 
     # TODO: consider starting all seed nodes from all rings first, then normal ones
-    # *** launch seed nodes
-    # *** launch normal nodes
+    for region_name, region in region_rings.items():
+        launch_seed_nodes(cluster, region_name, region, region['nodes'])
+
+    for region_name, region in region_rings.items():
+        launch_normal_nodes(cluster, region_name, region, region['nodes'])
 
     # TODO: print status message
 
@@ -906,7 +811,9 @@ def create_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
         'dmz': options['use_dmz'],
-        'hosted_zone': options['hosted_zone']
+        'hosted_zone': options['hosted_zone'],
+        'sns_topic': options['sns_topic'],
+        'sns_email': options['sns_email']
     }
     node_template = {
         'protect_from_termination': not(options['no_termination_protection']),
@@ -914,8 +821,6 @@ def create_cluster(options: dict):
         'scalyr_key': options['scalyr_key'],
         'docker_image': options['docker_image'], # TODO: resolve using artifact name
         'environment': options['environment'],
-        'sns_topic': options['sns_topic'],
-        'sns_email': options['sns_email'],
         'instance_type': options['instance_type'],
         # TODO: flatten back the volume params?
         'volume': {
@@ -1048,7 +953,9 @@ def extend_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
         'dmz': options['use_dmz'],
-        'hosted_zone': options['hosted_zone']
+        'hosted_zone': options['hosted_zone'],
+        'sns_topic': options['sns_topic'],
+        'sns_email': options['sns_email']
     }
     node_template = {
         'protect_from_termination': not(options['no_termination_protection']),
@@ -1056,8 +963,6 @@ def extend_cluster(options: dict):
         'scalyr_key': options['scalyr_key'],
         'docker_image': options['docker_image'], # TODO: resolve using artifact name
         'environment': options['environment'],
-        'sns_topic': options['sns_topic'],
-        'sns_email': options['sns_email'],
         'instance_type': options['instance_type'],
         'volume': {
             'type': options['volume_type'],
