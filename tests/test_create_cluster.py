@@ -748,7 +748,6 @@ def test_add_subnets(ec2_fixture):
 
 def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
     region_rings = copy.deepcopy(REGION_RINGS)
-    node_template = {}
     expected = copy.deepcopy(REGION_RINGS)
     expected['eu-central-1'].update(
         taupage_ami=EU_CENTRAL_TAUPAGE_AMI,
@@ -758,17 +757,8 @@ def test_prepare_rings(ec2_fixture, ec2_taupage_fixture):
         taupage_ami=EU_WEST_TAUPAGE_AMI,
         subnets=EU_WEST_SUBNETS,
         taken_ips=TAKEN_WEST_IPS)
-    actual = prepare_rings(node_template, region_rings)
-    assert set(actual.keys()) == set(expected.keys())
-    for k in expected.keys():
-        assert dict_contains(actual[k], expected[k])
-
-    assert list_just_contains_dicts(
-        actual['eu-central-1']['nodes'], PRIVATE_CENTRAL_NODES
-    )
-    assert list_just_contains_dicts(
-        actual['eu-west-1']['nodes'], PRIVATE_WEST_NODES
-    )
+    actual = prepare_rings(region_rings)
+    assert actual == expected
 
 
 def test_create_security_groups(ec2_sg_fixture):

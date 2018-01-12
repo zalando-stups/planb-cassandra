@@ -623,10 +623,8 @@ def configure_launched_instance(
     )
 
 
-def launch_seed_nodes(
-        cluster: dict, region_name: str, region: dict, nodes: list):
-
-    seed_nodes = [n for n in nodes if n['seed?']]
+def launch_seed_nodes(cluster: dict, region_name: str, region: dict):
+    seed_nodes = [n for n in region['nodes'] if n['seed?']]
     for node in seed_nodes:
         msg = "Launching SEED node {} in {}...".format(
             node['_defaultIp'], region_name
@@ -638,10 +636,8 @@ def launch_seed_nodes(
         time.sleep(60)
 
 
-def launch_normal_nodes(
-        cluster: dict, region_name: str, region: dict, ring: dict, nodes: list):
-
-    normal_nodes = [n for n in nodes if not n['seed?']]
+def launch_normal_nodes(cluster: dict, region_name: str, region: dict, ring: dict):
+    normal_nodes = [n for n in region['nodes'] if not n['seed?']]
     for node in normal_nodes:
         time.sleep(60)
         msg = "Launching node {} in {}...".format(
@@ -763,20 +759,19 @@ def add_cluster_instance_profile(cluster: dict) -> dict:
                 instance_profile=ensure_instance_profile(cluster['name']))
 
 
-def prepare_rings(node_template: dict, region_rings: dict) -> dict:
+def prepare_rings(region_rings: dict) -> dict:
     return thread_val(region_rings,
                       [add_taupage_amis,
                        add_subnets,
                        add_taken_private_ips,
-                       add_elastic_ips,
-                       (lambda rr: add_nodes_to_regions(node_template, rr))])
+                       add_elastic_ips])
 
 
 def create_rings(
         cluster: dict, node_template: dict,from_region: str, region_rings: dict):
 
     region_rings = prepare_rings(node_template, region_rings)
-
+    region_rings = add_nodes_to_regions(node_template, region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
 
     if cluster['sns_topic'] or cluster['sns_email']:
@@ -797,10 +792,10 @@ def create_rings(
 
     # TODO: consider starting all seed nodes from all rings first, then normal ones
     for region_name, region in region_rings.items():
-        launch_seed_nodes(cluster, region_name, region, region['nodes'])
+        launch_seed_nodes(cluster, region_name, region)
 
     for region_name, region in region_rings.items():
-        launch_normal_nodes(cluster, region_name, region, region['nodes'])
+        launch_normal_nodes(cluster, region_name, region)
 
     # TODO: print status message
 
@@ -812,15 +807,15 @@ def create_cluster(options: dict):
         'name': options['cluster_name'],
         'dmz': options['use_dmz'],
         'hosted_zone': options['hosted_zone'],
+        'scalyr_region': options['scalyr_region'],
+        'scalyr_key': options['scalyr_key'],
+        'docker_image': options['docker_image'], # TODO: resolve using artifact name
+        'environment': options['environment'],
         'sns_topic': options['sns_topic'],
         'sns_email': options['sns_email']
     }
     node_template = {
         'protect_from_termination': not(options['no_termination_protection']),
-        'scalyr_region': options['scalyr_region'],
-        'scalyr_key': options['scalyr_key'],
-        'docker_image': options['docker_image'], # TODO: resolve using artifact name
-        'environment': options['environment'],
         'instance_type': options['instance_type'],
         # TODO: flatten back the volume params?
         'volume': {
