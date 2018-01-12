@@ -719,22 +719,22 @@ either correct the error or retry.
 ''')
 
 
-def validate_artifact_version(options: dict) -> dict:
+def validate_artifact_version(cluster: dict) -> dict:
     conflict_options_msg = """Conflicting options: --artifact-name and
 --docker-image cannot be specified at the same time"""
-    if not options['docker_image']:
-        if not options['artifact_name']:
-            options['artifact_name'] = 'planb-cassandra-3.0'
-        image_version = get_latest_docker_image_version(options['artifact_name'])
-        docker_image = 'registry.opensource.zalan.do/stups/{}:{}' \
-                       .format(options['artifact_name'], image_version)
+
+    if not cluster['docker_image']:
+        artifact_name = cluster['artifact_name'] or 'planb-cassandra-3.0'
+        image_version = get_latest_docker_image_version(artifact_name)
+        docker_image = 'registry.opensource.zalan.do/stups/{}:{}'.format(
+            artifact_name, image_version
+        )
         info('Using docker image: {}'.format(docker_image))
+        return dict(cluster, docker_image=docker_image)
     else:
-        if options['artifact_name']:
+        if cluster['artifact_name']:
             raise click.UsageError(conflict_options_msg)
-        image_version = options['docker_image'].split(':')[-1]
-        docker_image = options['docker_image']
-    return dict(options, docker_image=docker_image, image_version=image_version)
+        return cluster
 
 
 def fetch_user_data_template(from_region: str, cluster: dict) -> dict:
@@ -771,8 +771,9 @@ def prepare_rings(region_rings: dict) -> dict:
 
 def create_rings(
         cluster: dict, node_template: dict,from_region: str, region_rings: dict):
+    cluster = validate_artifact_version(cluster)
 
-    region_rings = prepare_rings(node_template, region_rings)
+    region_rings = prepare_rings(region_rings)
     region_rings = add_nodes_to_regions(node_template, region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
 
@@ -816,11 +817,11 @@ def create_rings(
 def create_cluster(options: dict):
     cluster = {
         'name': options['cluster_name'],
-        'dmz': options['use_dmz'],
         'hosted_zone': options['hosted_zone'],
         'scalyr_region': options['scalyr_region'],
         'scalyr_key': options['scalyr_key'],
-        'docker_image': options['docker_image'], # TODO: resolve using artifact name
+        'docker_image': options['docker_image'],
+        'artifact_name': options['artifact_name'],
         'environment': options['environment'],
         'sns_topic': options['sns_topic'],
         'sns_email': options['sns_email']
@@ -838,6 +839,7 @@ def create_cluster(options: dict):
     }
     region_rings = {
         region: {
+            'dmz': options['use_dmz'],
             'taupage_ami': None, # TODO: let to override
             'rings': [
                 {
