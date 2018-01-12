@@ -406,57 +406,59 @@ def add_subnets(regions: dict) -> dict:
             for region_name, region in regions.items()}
 
 
-def hostname_from_private_ip(region: str, ip: str) -> str:
-    return 'ip-{}.{}.compute.internal.'.format('-'.join(ip.split('.')), region)
+def hostname_from_private_ip(region_name: str, ip: str) -> str:
+    return 'ip-{}.{}.compute.internal.'.format(
+        '-'.join(ip.split('.')), region_name
+    )
 
 
-def make_dns_records(region: str, ips: list) -> list:
-    hosts = [hostname_from_private_ip(region, ip['PrivateIp']) for ip in ips]
+def make_dns_records(region_name: str, ips: list) -> list:
+    hosts = [hostname_from_private_ip(region_name, ip['PrivateIp']) for ip in ips]
     return [{'Value': '1 1 9042 {}'.format(host)} for host in hosts]
 
 
 def setup_dns_records(
-        cluster_name: str, hosted_zone: str, node_ips: dict, dc_suffix: str=""):
+        cluster: dict, region_name: str, nodes: list, dc_suffix: str=""):
 
     r53 = aws.boto_client('route53')
 
     zone = None
-    zones = r53.list_hosted_zones_by_name(DNSName=hosted_zone)
+    zones = r53.list_hosted_zones_by_name(DNSName=cluster['hosted_zone'])
     for z in zones['HostedZones']:
-        if z['Name'] == hosted_zone:
+        if z['Name'] == cluster['hosted_zone']:
             zone = z
     if not zone:
-        raise Exception('Failed to find Hosted Zone {}'.format(hosted_zone))
+        raise Exception(
+            'Failed to find Hosted Zone {}'.format(cluster['hosted_zone'])
+        )
 
-    for region, ips in node_ips.items():
-        with Action('Setting up Route53 SRV records in {}..'.format(region)):
-            name = '_{}{}-{}._tcp.{}'.format(
-                cluster_name, dc_suffix, region, hosted_zone
-            )
-            #
-            # NB: We always want the clients to connect using private
-            # IP addresses.
-            #
-            # But we must record the host names, otherwise the client
-            # will get the addresses ending with the dot from the DSN
-            # lookup and won't recognize them as such.
-            #
-            records = make_dns_records(region, ips)
+    name = '_{}{}-{}._tcp.{}'.format(
+        cluster['name'], dc_suffix, region_name, cluster['hosted_zone']
+    )
+    #
+    # NB: We always want the clients to connect using private
+    # IP addresses.
+    #
+    # But we must record the host names, otherwise the client
+    # will get the addresses ending with the dot from the DSN
+    # lookup and won't recognize them as such.
+    #
+    records = make_dns_records(region_name, nodes)
 
-            r53.change_resource_record_sets(
-                HostedZoneId=zone['Id'],
-                ChangeBatch={
-                    'Changes': [{
-                        'Action': 'UPSERT',
-                        'ResourceRecordSet': {
-                            'Name': name,
-                            'Type': 'SRV',
-                            'TTL': 60,
-                            'ResourceRecords': records
-                        }
-                    }]
+    r53.change_resource_record_sets(
+        HostedZoneId=zone['Id'],
+        ChangeBatch={
+            'Changes': [{
+                'Action': 'UPSERT',
+                'ResourceRecordSet': {
+                    'Name': name,
+                    'Type': 'SRV',
+                    'TTL': 60,
+                    'ResourceRecords': records
                 }
-            )
+            }]
+        }
+    )
 
 
 def list_all_seed_node_ips(seed_nodes: dict) -> list:
@@ -630,13 +632,13 @@ def launch_seed_nodes(cluster: dict, region_name: str, region: dict):
             node['_defaultIp'], region_name
         )
         with Action(msg) as act:
-            instance_id = launch_node(cluster, region_name, region, ring, node)
+            instance_id = launch_node(cluster, region_name, region, node)
             node['instance_id'] = instance_id
-            configure_launched_instance(cluster, region_name, node)
+            configure_launched_instance(cluster, region_name, region, node)
         time.sleep(60)
 
 
-def launch_normal_nodes(cluster: dict, region_name: str, region: dict, ring: dict):
+def launch_normal_nodes(cluster: dict, region_name: str, region: dict):
     normal_nodes = [n for n in region['nodes'] if not n['seed?']]
     for node in normal_nodes:
         time.sleep(60)
@@ -645,9 +647,9 @@ def launch_normal_nodes(cluster: dict, region_name: str, region: dict, ring: dic
         )
         with Action(msg) as act:
             # TODO: duplicated 3 lines
-            instance_id = launch_node(cluster, region_name, region, ring, node)
+            instance_id = launch_node(cluster, region_name, region, node)
             node['instance_id'] = instance_id
-            configure_launched_instance(cluster, region_name, node)
+            configure_launched_instance(cluster, region_name, region, node)
 
 
 def print_success_message(options: dict):
@@ -773,6 +775,15 @@ def create_rings(
     region_rings = prepare_rings(node_template, region_rings)
     region_rings = add_nodes_to_regions(node_template, region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
+
+    if cluster['hosted_zone']:
+        for region_name, region in region_rings.items():
+            setup_dns_records(
+                cluster,
+                region_name,
+                nodes,
+                dc_suffix=region['rings'][0]['dc_suffix'] # TODO: Bo-o-o-oo!
+            )
 
     if cluster['sns_topic'] or cluster['sns_email']:
         region_rings = add_sns_topics_for_alarm(

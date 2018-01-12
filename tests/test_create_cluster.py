@@ -24,7 +24,8 @@ from planb.create_cluster import \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
-    seed_iterator
+    seed_iterator, \
+    setup_dns_records
 
 from test_aws import install_boto_client_mock
 
@@ -1061,3 +1062,50 @@ def test_configure_launched_instance(ec2_launch_fixture):
         AllocationId='a1'
     )
     ec2['eu-central-1'].put_metric_alarm.assert_called_once()
+
+
+def test_setup_dns_records(monkeypatch):
+    r53 = MagicMock()
+    client = MagicMock()
+    client.side_effect = lambda _, **kwargs: r53
+    monkeypatch.setattr('planb.aws.boto_client', client)
+
+    cluster = {
+        'name': 'test-cluster',
+        'hosted_zone': 'example.com.'
+    }
+    nodes = [
+        {'PrivateIp': '172.31.10.20'},
+        {'PrivateIp': '172.31.30.40'}
+    ]
+
+    r53.list_hosted_zones_by_name.return_value = {
+        'HostedZones': [
+            {
+                'Name': 'example.com.',
+                'Id': 'zone-111'
+            }
+        ]
+    }
+
+    setup_dns_records(cluster, 'eu-central-1', nodes, dc_suffix='_xxx')
+
+    r53.change_resource_record_sets.assert_called_once_with(
+        HostedZoneId='zone-111',
+        ChangeBatch={
+            'Changes': [
+                {
+                    'Action': 'UPSERT',
+                    'ResourceRecordSet': {
+                        'Name': '_test-cluster_xxx-eu-central-1._tcp.example.com.',
+                        'Type': 'SRV',
+                        'TTL': 60,
+                        'ResourceRecords': [
+                            {'Value': '1 1 9042 ip-172-31-10-20.eu-central-1.compute.internal.'},
+                            {'Value': '1 1 9042 ip-172-31-30-40.eu-central-1.compute.internal.'}
+                        ]
+                    }
+                }
+            ]
+        }
+    )
