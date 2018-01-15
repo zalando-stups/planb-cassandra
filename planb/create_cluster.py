@@ -331,7 +331,8 @@ def add_nodes_to_regions(
             for region_name, region in region_rings.items()}
 
 
-def list_taken_private_ips(ec2: object) -> set:
+def list_taken_private_ips(region_name: str) -> set:
+    ec2 = aws.boto_client('ec2', region_name)
     #paginator = ec2.get_paginator('describe_instances')
     #resp = paginator.paginate().build_full_result()
     #
@@ -339,15 +340,17 @@ def list_taken_private_ips(ec2: object) -> set:
     # Using MaxResults=1000 sounds like a good enough approximation for now.
     #
     instances = list_instances(ec2, MaxResults=1000)
-    return set([i['PrivateIpAddress'] for i in instances])
+    for i in instances:
+        if 'PrivateIpAddress' not in i:
+            print(i)
+    return set(i['PrivateIpAddress']
+               for i in instances
+               if 'PrivateIpAddress' in i)
 
 
 def add_taken_private_ips(region_rings: dict) -> dict:
-    def add_to_region(region_name: str, region: dict) -> dict:
-        ec2 = aws.boto_client('ec2', region_name)
-        return dict(region, taken_ips=list_taken_private_ips(ec2))
-
-    return {region_name: add_to_region(region_name, region)
+    return {region_name: dict(region,
+                              taken_ips=list_taken_private_ips(region_name))
             for region_name, region in region_rings.items()}
 
 

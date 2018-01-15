@@ -21,6 +21,7 @@ from planb.create_cluster import \
     get_region_ip_iterator, \
     get_subnet_name, \
     launch_node, \
+    list_taken_private_ips, \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
@@ -102,7 +103,8 @@ def ec2_fixture(monkeypatch):
         'Reservations': [
             {
                 'Instances': [
-                    {'PrivateIpAddress': '172.31.8.11'}
+                    {'PrivateIpAddress': '172.31.8.11'},
+                    {'State': {'Code': 48, 'Name': 'terminated'}}
                 ]
             }
         ]
@@ -418,6 +420,12 @@ PUBLIC_WEST_NODES = [
 
 TAKEN_CENTRAL_IPS = set(['172.31.8.11'])
 TAKEN_WEST_IPS = set(['172.31.100.11', '172.31.116.11'])
+
+
+def test_list_taken_private_ips(ec2_fixture):
+    assert list_taken_private_ips('eu-central-1') == set(['172.31.8.11'])
+    assert list_taken_private_ips('eu-west-1') == set(['172.31.100.11',
+                                                       '172.31.116.11'])
 
 
 def test_address_pool_depletion():
