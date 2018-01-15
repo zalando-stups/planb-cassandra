@@ -21,7 +21,6 @@ from planb.create_cluster import \
     get_region_ip_iterator, \
     get_subnet_name, \
     launch_node, \
-    list_taken_private_ips, \
     make_ingress_rules, \
     make_nodes, \
     prepare_rings, \
@@ -422,10 +421,14 @@ TAKEN_CENTRAL_IPS = set(['172.31.8.11'])
 TAKEN_WEST_IPS = set(['172.31.100.11', '172.31.116.11'])
 
 
-def test_list_taken_private_ips(ec2_fixture):
-    assert list_taken_private_ips('eu-central-1') == set(['172.31.8.11'])
-    assert list_taken_private_ips('eu-west-1') == set(['172.31.100.11',
-                                                       '172.31.116.11'])
+def tets_add_taken_private_ips(ec2_fixture):
+    region_rings = copy.deepcopy(REGION_RINGS)
+    expected = copy.deepcopy(REGION_RINGS)
+    expected['eu-central-1']['taken_ips'] = set(['172.31.8.11'])
+    expected['eu-west-1']['taken_ips'] = set(['172.31.100.11',
+                                              '172.31.116.11'])
+    actual = add_taken_private_ips(region_rings)
+    assert actual == expected
 
 
 def test_address_pool_depletion():
