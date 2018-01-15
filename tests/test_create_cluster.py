@@ -16,6 +16,7 @@ from planb.create_cluster import \
     collect_seed_nodes, \
     configure_launched_instance, \
     create_data_volume_for_node, \
+    create_instance, \
     create_user_data_for_ring, \
     create_user_data_template, \
     get_region_ip_iterator, \
@@ -1131,6 +1132,40 @@ def test_configure_launched_instance_no_alarm(ec2_launch_fixture):
     ec2['eu-central-1'].associate_address.assert_called_once_with(
         InstanceId='i-12345',
         AllocationId='a1'
+    )
+
+
+def test_create_instance(monkeypatch):
+    cluster = {'name': 'test-cluster'}
+    region = {
+        'taken_ips': set()
+    }
+    node = {
+        '_defaultIp': '12.34'
+    }
+    create_data_volume_mock = MagicMock()
+    launch_node_mock = MagicMock()
+    launch_node_mock.return_value = 'i-12345'
+    configure_instance_mock = MagicMock()
+    monkeypatch.setattr(
+        'planb.create_cluster.create_data_volume_for_node',
+        create_data_volume_mock
+    )
+    monkeypatch.setattr('planb.create_cluster.launch_node', launch_node_mock)
+    monkeypatch.setattr(
+        'planb.create_cluster.configure_launched_instance',
+        configure_instance_mock
+    )
+
+    create_instance(cluster, 'eu-central-1', region, node)
+
+    create_data_volume_mock.assert_called_once_with('eu-central-1', node)
+    launch_node_mock.assert_called_once_with(
+        cluster, 'eu-central-1', region, node
+    )
+    configure_instance_mock.assert_called_once_with(
+        cluster, 'eu-central-1', region,
+        {'_defaultIp': '12.34', 'instance_id': 'i-12345'}
     )
 
 

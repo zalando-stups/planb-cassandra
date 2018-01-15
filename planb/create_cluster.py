@@ -632,6 +632,13 @@ def configure_launched_instance(
     )
 
 
+def create_instance(cluster: dict, region_name: str, region: dict, node: dict):
+    create_data_volume_for_node(region_name, node)
+    instance_id = launch_node(cluster, region_name, region, node)
+    node['instance_id'] = instance_id
+    configure_launched_instance(cluster, region_name, region, node)
+
+
 def launch_seed_nodes(cluster: dict, region_name: str, region: dict):
     seed_nodes = [n for n in region['nodes'] if n['seed?']]
     for node in seed_nodes:
@@ -639,9 +646,7 @@ def launch_seed_nodes(cluster: dict, region_name: str, region: dict):
             node['_defaultIp'], region_name
         )
         with Action(msg) as act:
-            instance_id = launch_node(cluster, region_name, region, node)
-            node['instance_id'] = instance_id
-            configure_launched_instance(cluster, region_name, region, node)
+            create_instance(cluster, region_name, region, node)
         time.sleep(60)
 
 
@@ -653,10 +658,7 @@ def launch_normal_nodes(cluster: dict, region_name: str, region: dict):
             node['_defaultIp'], region_name
         )
         with Action(msg) as act:
-            # TODO: duplicated 3 lines
-            instance_id = launch_node(cluster, region_name, region, node)
-            node['instance_id'] = instance_id
-            configure_launched_instance(cluster, region_name, region, node)
+            create_instance(cluster, region_name, region, node)
 
 
 def print_success_message(options: dict):
