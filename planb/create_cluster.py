@@ -340,9 +340,6 @@ def list_taken_private_ips(region_name: str) -> set:
     # Using MaxResults=1000 sounds like a good enough approximation for now.
     #
     instances = list_instances(ec2, MaxResults=1000)
-    for i in instances:
-        if 'PrivateIpAddress' not in i:
-            print(i)
     return set(i['PrivateIpAddress']
                for i in instances
                if 'PrivateIpAddress' in i)
