@@ -1094,6 +1094,46 @@ def test_configure_launched_instance(ec2_launch_fixture):
     ec2['eu-central-1'].put_metric_alarm.assert_called_once()
 
 
+def test_configure_launched_instance_no_alarm(ec2_launch_fixture):
+    ec2 = ec2_launch_fixture
+
+    cluster = {
+        'name': 'test-cluster'
+    }
+    region = {
+    }
+    node = {
+        'instance_id': 'i-12345',
+        'PublicIp': '12.34',
+        'AllocationId': 'a1'
+    }
+
+    ec2['eu-central-1'].describe_instances.return_value = {
+        'Reservations': [
+            {
+                'Instances': [
+                    {
+                        'State': {
+                            'Name': 'running'
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    configure_launched_instance(cluster, 'eu-central-1', region, node)
+
+    ec2['eu-central-1'].create_tags.assert_called_once_with(
+        Resources=['i-12345'],
+        Tags=[{'Key': 'Name', 'Value': 'test-cluster'}]
+    )
+    ec2['eu-central-1'].associate_address.assert_called_once_with(
+        InstanceId='i-12345',
+        AllocationId='a1'
+    )
+
+
 def test_setup_dns_records(monkeypatch):
     r53 = MagicMock()
     client = MagicMock()

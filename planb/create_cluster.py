@@ -627,7 +627,8 @@ def configure_launched_instance(
         )
 
     create_auto_recovery_alarm(
-        region_name, cluster['name'], instance_id, region['alarm_sns_topic_arn']
+        region_name, cluster['name'], instance_id,
+        region.get('alarm_sns_topic_arn')
     )
 
 
