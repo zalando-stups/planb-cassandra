@@ -533,6 +533,8 @@ def create_user_data_for_ring(template: dict, ring: dict, dmz: bool) -> dict:
     env['NUM_TOKENS'] = ring['num_tokens']
     env['SUBNET_TYPE'] = 'dmz' if dmz else 'internal'
 
+    # TODO: broken!
+    # TODO: dc_suffix
     if ring.get('environment'):
         data['environment'].update(ring['environment'])
 
@@ -831,7 +833,7 @@ def create_cluster(options: dict):
         'scalyr_key': options['scalyr_key'],
         'docker_image': options['docker_image'],
         'artifact_name': options['artifact_name'],
-        'environment': options['environment'],
+        'environment': environment_as_dict(options.get('environment', [])),
         'sns_topic': options['sns_topic'],
         'sns_email': options['sns_email']
     }
@@ -860,109 +862,18 @@ def create_cluster(options: dict):
         }
         for region in options['regions']
     }
-    create_rings(
-        cluster, node_template, from_region=None, region_rings=region_rings
-    )
-
-################################################################################
-# old implementation
-#
-    options = validate_artifact_version(options)
-    options['environment'] = environment_as_dict(options.get('environment', []))
-
-    keystore, truststore = generate_certificate(options['cluster_name'])
-
-    # List of IP addresses by region
-    node_ips = collections.defaultdict(list)
-
-    # Mapping of region name to the Security Group
-    security_groups = {}
-
     try:
-        taupage_amis = find_taupage_amis(options['regions'])
-
-        subnets = get_subnets(
-            'dmz-' if options['use_dmz'] else 'internal-',
-            options['regions']
+        create_rings(
+            cluster, node_template, from_region=None, region_rings=region_rings
         )
-        allocate_ip_addresses(
-            subnets, options['cluster_size'], node_ips,
-            take_elastic_ips=options['use_dmz']
-        )
-
-        if options['sns_topic'] or options['sns_email']:
-            alarm_topics = setup_sns_topics_for_alarm(
-                options['regions'],
-                options['sns_topic'],
-                options['sns_email']
-            )
-        else:
-            alarm_topics = {}
-
-        if options['hosted_zone']:
-            setup_dns_records(
-                options['cluster_name'],
-                options['hosted_zone'],
-                node_ips
-            )
-        setup_security_groups(
-            options['use_dmz'],
-            options['cluster_name'],
-            node_ips,
-            security_groups
-        )
-        # We should have up to 3 seeds nodes per DC
-        seed_count = min(options['cluster_size'], 3)
-        seed_nodes = pick_seed_node_ips(node_ips, seed_count)
-
-        options = dict(
-            options,
-            keystore=keystore,
-            truststore=truststore,
-            seed_count=seed_count,
-            seed_nodes=seed_nodes
-        )
-        user_data = generate_taupage_user_data(options)
-
-        instance_profile = ensure_instance_profile(options['cluster_name'])
-
-        options = dict(
-            options,
-            node_ips=node_ips,
-            security_groups=security_groups,
-            taupage_amis=taupage_amis,
-            subnets=subnets,
-            alarm_topics=alarm_topics,
-            user_data=user_data,
-            instance_profile=instance_profile
-        )
-        launch_seed_nodes(options)
-
-        # TODO: make sure all seed nodes are up
-        launch_normal_nodes(options)
-
         print_success_message(options)
-
     except:
         print_failure_message()
-
         #
         # TODO: in order to break dependencies, delete entities in the
         # order opposite to the creation.  For that pushing things on
         # Undo stack sounds like a natural choice.
         #
-        for region, sg in security_groups.items():
-            ec2 = aws.boto_client('ec2', region)
-            info('Cleaning up security group: {}'.format(sg['GroupId']))
-            ec2.delete_security_group(GroupId=sg['GroupId'])
-
-        if options['use_dmz']:
-            for region, ips in node_ips.items():
-                ec2 = aws.boto_client('ec2', region)
-                for ip in ips:
-                    info('Releasing IP address: {}'.format(ip['PublicIp']))
-                    ec2.release_address(AllocationId=ip['AllocationId'])
-
         raise
 
 
@@ -1007,124 +918,5 @@ def extend_cluster(options: dict):
 ################################################################################
 # old implementation
 #
-
-    # TODO: don't override docker image?
-    options = validate_artifact_version(options)
-    options['environment'] = environment_as_dict(options.get('environment', []))
-
-    # List of IP addresses by region
-    node_ips = collections.defaultdict(list)
-
-    # Mapping of region name to the Security Group
-    security_groups = {}
-
-    try:
-        # TODO: get it from a running instance details?
-        taupage_amis = find_taupage_amis([options['to_region']])
-
-        subnets = get_subnets(
-            'dmz-' if options['use_dmz'] else 'internal-',
-            [options['to_region']]
-        )
-        allocate_ip_addresses(
-            subnets, options['ring_size'], node_ips,
-            take_elastic_ips=options['use_dmz']
-        )
-
-        if options['sns_topic'] or options['sns_email']:
-            alarm_topics = setup_sns_topics_for_alarm(
-                [options['to_region']],
-                options['sns_topic'],
-                options['sns_email']
-            )
-        else:
-            alarm_topics = {}
-
-        if options['hosted_zone']:
-            setup_dns_records(
-                options['cluster_name'],
-                options['hosted_zone'],
-                node_ips,
-                options['dc_suffix']
-            )
-
-        cluster_sg = find_security_group_by_name(ec2, options['cluster_name'])
-        security_groups = {
-            options['from_region']: cluster_sg
-        }
-        if options['to_region'] != options['from_region']:
-            all_ips = node_ips.copy()
-            all_ips[options['from_region']] = get_public_ips_from_sg(cluster_sg)
-
-            security_groups[options['to_region']] = create_security_group(
-                options['to_region'],
-                node_ips[options['to_region']],
-                options['use_dmz'],
-                options['cluster_name'],
-                all_ips
-            )
-            # TODO: no rollback for now
-            extend_security_group(
-                options['from_region'],
-                cluster_sg,
-                node_ips[options['to_region']]
-            )
-
-        # We should have up to 3 seeds nodes per DC
-        seed_count = min(options['ring_size'], 3)
-        seed_nodes = pick_seed_node_ips(node_ips, seed_count)
-
-        options = dict(
-            options,
-            seed_count=seed_count,
-            seed_nodes=seed_nodes
-        )
-
-
         env = user_data['environment']
         env['AUTO_BOOTSTRAP'] = 'false'
-        env['DC_SUFFIX'] = options['dc_suffix']
-
-        new_seeds = list_all_seed_node_ips(seed_nodes)
-        env['SEEDS'] = "{},{}".format(','.join(new_seeds), env['SEEDS'])
-
-        instance_profile = ensure_instance_profile(options['cluster_name'])
-
-        # we only launch instances in the target region:
-        options['regions'] = [options['to_region']]
-
-        options = dict(
-            options,
-            node_ips=node_ips,
-            security_groups=security_groups,
-            taupage_amis=taupage_amis,
-            subnets=subnets,
-            alarm_topics=alarm_topics,
-            user_data=user_data,
-            instance_profile=instance_profile
-        )
-        launch_seed_nodes(options)
-
-        # TODO: make sure all seed nodes are up
-        launch_normal_nodes(options)
-
-    except:
-        print_failure_message()
-
-        if options['to_region'] != options['from_region']:
-            region = options['to_region']
-            sg = security_groups.get(region)
-            if sg:
-                info('Cleaning up security group: {}'.format(sg['GroupId']))
-                ec2 = aws.boto_client('ec2', region)
-                ec2.delete_security_group(GroupId=sg['GroupId'])
-
-        if options['use_dmz']:
-            for region, ips in node_ips.items():
-                ec2 = aws.boto_client('ec2', region)
-                for ip in ips:
-                    if 'AllocationId' in ip:
-                        info('Releasing IP address: {}'.format(ip['PublicIp']))
-                        ec2.release_address(AllocationId=ip['AllocationId'])
-
-        raise
