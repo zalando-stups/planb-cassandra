@@ -501,26 +501,29 @@ def test_add_elastic_ips(ec2_fixture):
 
 
 def test_make_nodes_one_ring():
+    cluster = {'name': 'test-cluster'}
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_west = region_rings['eu-west-1']
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
-    node_template = {}
-    actual = make_nodes(node_template, eu_west)
+    node_template = {'volume': {}}
+    actual = make_nodes(cluster, node_template, eu_west)
     assert list_just_contains_dicts(actual, PRIVATE_WEST_NODES)
 
 
 def test_make_nodes_two_rings():
+    cluster = {'name': 'test-cluster'}
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
     eu_central['taken_ips'] = TAKEN_CENTRAL_IPS
-    node_template = {}
-    actual = make_nodes(node_template, eu_central)
+    node_template = {'volume': {}}
+    actual = make_nodes(cluster, node_template, eu_central)
     assert list_just_contains_dicts(actual, PRIVATE_CENTRAL_NODES)
 
 
 def test_make_nodes_with_template():
+    cluster = {'name': 'test-cluster'}
     eu_central = {
         'dmz': False,
         'rings': [
@@ -537,8 +540,23 @@ def test_make_nodes_with_template():
             'type': 'gp2'
         }
     }
-    expected = [node_template, node_template]
-    actual = make_nodes(node_template, eu_central)
+    expected = [
+        {
+            'instance_type': 't2.atto',
+            'volume': {
+                'type': 'gp2',
+                'name': 'test-cluster-172.31.0.11'
+            }
+        },
+        {
+            'instance_type': 't2.atto',
+            'volume': {
+                'type': 'gp2',
+                'name': 'test-cluster-172.31.8.12'
+            }
+        }
+    ]
+    actual = make_nodes(cluster, node_template, eu_central)
     assert list_just_contains_dicts(actual, expected)
 
 
@@ -606,6 +624,7 @@ def test_get_region_ip_iterator_remove_taken_ip():
 
 
 def test_add_nodes_to_regions():
+    cluster = {'name': 'test-cluster'}
     region_rings = copy.deepcopy(REGION_RINGS)
     eu_central = region_rings['eu-central-1']
     eu_central['subnets'] = EU_CENTRAL_SUBNETS
@@ -615,10 +634,10 @@ def test_add_nodes_to_regions():
     eu_west['subnets'] = EU_WEST_SUBNETS
     eu_west['taken_ips'] = TAKEN_WEST_IPS
     eu_west['elastic_ips'] = []
-    node_template = {}
+    node_template = {'volume': {}}
     expected = copy.deepcopy(region_rings)
 
-    actual = add_nodes_to_regions(node_template, region_rings)
+    actual = add_nodes_to_regions(cluster, node_template, region_rings)
     assert set(actual.keys()) == set(expected.keys())
     for k in expected.keys():
         assert dict_contains(actual[k], expected[k])

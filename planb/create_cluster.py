@@ -305,7 +305,7 @@ def get_region_ip_iterator(
         yield address
 
 
-def make_nodes(node_template: dict, region: dict) -> list:
+def make_nodes(cluster: dict, node_template: dict, region: dict) -> list:
     nodes = []
     ipiter = get_region_ip_iterator(
         region['subnets'], region['taken_ips'],
@@ -315,13 +315,19 @@ def make_nodes(node_template: dict, region: dict) -> list:
         node = copy.deepcopy(node_template)
         node.update(**ip)
         node.update({'seed?': s})
+        node['volume']['name'] = "{}-{}".format(
+            cluster['name'], node['PrivateIp']
+        )
         nodes.append(node)
 
     return nodes
 
 
-def add_nodes_to_regions(node_template: dict, region_rings: dict) -> dict:
-    return {region_name: dict(region, nodes=make_nodes(node_template, region))
+def add_nodes_to_regions(
+        cluster: dict, node_template: dict, region_rings: dict) -> dict:
+
+    return {region_name: dict(region,
+                              nodes=make_nodes(cluster, node_template, region))
             for region_name, region in region_rings.items()}
 
 
@@ -774,7 +780,7 @@ def create_rings(
     cluster = validate_artifact_version(cluster)
 
     region_rings = prepare_rings(region_rings)
-    region_rings = add_nodes_to_regions(node_template, region_rings)
+    region_rings = add_nodes_to_regions(cluster, node_template, region_rings)
     region_rings = add_security_groups(cluster, from_region, region_rings)
 
     if cluster['hosted_zone']:
