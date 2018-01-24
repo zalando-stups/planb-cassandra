@@ -164,12 +164,12 @@ the last used node.
 
 .. code-block:: bash
 
-    $ zaws re $ACCOUNT
-    $ piu re -O $ODDHOST $ODDHOST
+    $ zaws re $ACCOUNT  # for longer updates run `zaws login -r` in background
+    $ piu re -O $ODDHOST $ODDHOST  # for longer updates add `-t 180` or bigger
     $ ./planb.py update --cluster-name mycluster \
         --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 \
         --region eu-central-1 \
-        -O $ODDHOST \
+        --odd-host $ODDHOST \
         --sns-topic planb-cassandra-system-event \
         --sns-email test@example.com
 
@@ -189,6 +189,41 @@ Available options for update:
 --sns-topic          Amazon SNS topic name to use for notifications about Auto-Recovery.
 --sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 ===================  ========================================================
+
+Update is an interactive command which operates on one node at a time.
+It will prompt before starting update of each node.  It starts by draining the
+target node and then terminates the EC2 instance that is running it.  Then a new
+EC2 instance is created with the same private and public IP addresses (if any),
+and potentially different configuration as specified by the options.  The new
+instance is expected to attach the EBS volume that was previously utilized by the
+node.  This keeps all the node's data and identification within the cluster intact.
+
+The command will wait for the replacement node to be back UP.  You should still
+monitor the status of the cluster to verify that all other nodes also see the new
+node as UP before proceeding.
+
+The command will refuse to proceed if some nodes are DOWN.  This could be a false
+positive, however if some nodes were decommissioned recently (it takes about 72 hours
+for this state to clear).
+
+While performing the update, which destroys the running EC2 instance and creates a
+blank one, the command keeps the current state in the Tags of the EBS data volume.
+
+If interrupted by some unexpected problems, the command resumes the update sequence
+by using the information in the EBS volume tags.  This relies however on an assumption
+that the command is ran again with essentially the same parameters on the same machine,
+since some of the state is stored in a temporary file, named after the EBS volume id.
+
+If the command enters `failed` state, as a safety precaution it will not try to proceed
+further, even if started again.  The operator is then responsible for analysing the
+failure reason and removing the failed state tag from the related EBS volume before
+starting the command again.  One common source of failed state is forgetting to use
+`--force-termination` flag on a cluster which was deployed with termination protection
+enabled.
+
+No provisions are made by the command to detect if a concurrent update operation is
+in progress for a given cluster.  It makes sense to ensure that only one operator is
+using the command as part of routine maintenance at any given time.
 
 Extend an existing cluster
 --------------------------
