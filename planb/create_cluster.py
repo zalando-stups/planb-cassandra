@@ -551,6 +551,10 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         )
 
 
+def generate_initial_tokens(n: int) -> list:
+    return [str(((2**64 // n) * i) - 2**63) for i in range(n)]
+
+
 def launch_seed_nodes(options: dict):
     total_seed_count = options['seed_count'] * len(options['regions'])
     seeds_launched = 0
@@ -558,6 +562,11 @@ def launch_seed_nodes(options: dict):
         security_group_id = options['security_groups'][region]['GroupId']
         subnets = options['subnets'][region]
         for i, ip in enumerate(ips):
+            if options['set_seed_tokens']:
+                num_tokens = options['num_tokens']
+                tokens = options['tokens'][i*num_tokens : (i+1)*num_tokens]
+                env = options['user_data']['environment']
+                env['JVM_EXTRA_OPTS'] = '-Dcassandra.initial_token=' + ','.join(tokens)
             launch_instance(
                 region, ip,
                 ami=options['taupage_amis'][region],
@@ -793,7 +802,6 @@ def extend_cluster(options: dict):
 
     # TODO: don't override docker image?
     options = validate_artifact_version(options)
-    options['environment'] = environment_as_dict(options.get('environment', []))
 
     # List of IP addresses by region
     node_ips = collections.defaultdict(list)
@@ -868,6 +876,8 @@ def extend_cluster(options: dict):
         env = user_data['environment']
         env['AUTO_BOOTSTRAP'] = 'false'
         env['DC_SUFFIX'] = options['dc_suffix']
+        env['NUM_TOKENS'] = options['num_tokens']
+        env.update(environment_as_dict(options.get('environment', [])))
 
         new_seeds = list_all_seed_node_ips(seed_nodes)
         env['SEEDS'] = "{},{}".format(','.join(new_seeds), env['SEEDS'])
@@ -887,7 +897,15 @@ def extend_cluster(options: dict):
             user_data=user_data,
             instance_profile=instance_profile
         )
+        if options['set_seed_tokens']:
+            options = dict(options,
+                           tokens=generate_initial_tokens(seed_count * options['num_tokens']))
+
         launch_seed_nodes(options)
+
+        if options['allocate_tokens_for_keyspace']:
+            env['AUTO_BOOTSTRAP'] = 'true'
+            env['JVM_EXTRA_OPTS'] = '-Dcassandra.allocate_tokens_for_keyspace=' + options['allocate_tokens_for_keyspace']
 
         # TODO: make sure all seed nodes are up
         launch_normal_nodes(options)
