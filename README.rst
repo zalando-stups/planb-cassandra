@@ -207,7 +207,7 @@ positive, however if some nodes were decommissioned recently (it takes about 72 
 for this state to clear).
 
 While performing the update, which destroys the running EC2 instance and creates a
-blank one, the command keeps the current state in the Tags of the EBS data volume.
+blank one, the command keeps the current state in the tags of the EBS data volume.
 
 If interrupted by some unexpected problems, the command resumes the update sequence
 by using the information in the EBS volume tags.  This relies however on an assumption
