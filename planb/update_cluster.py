@@ -32,10 +32,6 @@ remote_jolokia_port = 8778
 jolokia_url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
 
 
-class ClusterUnhealthyException(Exception):
-    pass
-
-
 def text_timestamp():
     return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -144,24 +140,7 @@ def list_instance_dump_files() -> list:
             if re.match('^vol-\w+\.json$', x)]
 
 
-def get_cluster_status() -> dict:
-    try:
-        queries = [{
-            'mbean': 'org.apache.cassandra.net:type=FailureDetector',
-            'type': 'read'
-        }]
-        response = requests.post(jolokia_url, json=queries).json()
-        if len(response) == 1:
-            return response[0].get('value', {})
-        return {}
-    except requests.exceptions.ConnectionError:
-        return {}
-
-
 def prepare_update(ec2: object, volume: dict, options: dict):
-    if get_cluster_status().get('DownEndpointCount') != 0:
-        raise ClusterUnhealthyException()
-
     instance = find_instance_from_volume(ec2, volume)
     if not instance:
         set_error_state(
@@ -367,20 +346,35 @@ def configure_instance(ec2: object, volume: dict, saved_instance: dict,
     set_state(ec2, volume, 'configured')
 
 
+def get_node_status() -> dict:
+    try:
+        queries = [{
+            'mbean': 'org.apache.cassandra.db:type=StorageService',
+            'type': 'read'
+        }]
+        response = requests.post(jolokia_url, json=queries).json()
+        if len(response) == 1:
+            return response[0].get('value', {})
+        return {}
+    except requests.exceptions.ConnectionError:
+        return {}
+
+
 def check_node_status(ec2: object, volume: dict):
-    down_count = get_cluster_status().get('DownEndpointCount')
-    logger.info("DownEndpointCount: {}".format(down_count))
-    if down_count == 0:
+    node_info = get_node_status()
+    op_mode = node_info.get('OperationMode', '<UNKNOWN>')
+    logger.info("Node status: {}".format(op_mode))
+    if op_mode == 'NORMAL':
         set_state(ec2, volume, 'completed')
 
 
 def cleanup_state(ec2: object, volume: dict):
     volume_id = volume['VolumeId']
-    logger.info("Operation 'update' completed on {}".format(volume_id))
     ec2.delete_tags(
         Resources=[volume_id],
         Tags=[{'Key': 'planb:operation:state'}]
     )
+    logger.info("Operation 'update' completed on {}".format(volume_id))
 
 
 def step_forward(ec2: object, volume_id: str, options: dict):
@@ -533,6 +527,9 @@ def update_cluster(options: dict):
         # TODO: user should hit Ctrl-c to cancel everything
         # don't ask again if resuming after crash
         if len(instances) > 1:
+            logger.warn("-----------------------------------------------")
+            logger.warn("!!! Check your monitoring before proceeding !!!")
+            logger.warn("-----------------------------------------------")
             question = "Update node {}?".format(i['PrivateIpAddress'])
             if not click.confirm(question):
                 continue
@@ -567,14 +564,6 @@ def update_cluster(options: dict):
             instance_dump_file = instance_filename(volume)
             if os.path.exists(instance_dump_file):
                 os.unlink(instance_dump_file)
-
-        except ClusterUnhealthyException:
-            sys.stderr.write("""
-Some nodes are DOWN.  Not updating anything!
-
-Please make sure all nodes are UP before proceeding with update.
-            """)
-            return
 
         finally:
             ssh.terminate()
