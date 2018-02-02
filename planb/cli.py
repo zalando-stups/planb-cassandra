@@ -97,7 +97,6 @@ def create(regions: list,
 @click.option('--ring-size', type=int, required=True)
 @click.option('--dc-suffix', default='', type=str, callback=validate_dc_suffix)
 @click.option('--num-tokens', default=256, type=int, help='number of virtual nodes per node, default: 256')
-@click.option('--set-seed-tokens', is_flag=True, help='calculate initial_token for the seed nodes')
 @click.option('--allocate-tokens-for-keyspace', type=str, help='allocate tokens for specified keyspace on non-seed nodes')
 @click.option('--instance-type', default='t2.medium', help='default: t2.medium')
 @click.option('--volume-type', default='gp2', help='gp2 (default) | io1 | standard')
@@ -117,7 +116,6 @@ def extend(from_region: str,
            ring_size: int,
            dc_suffix: str,
            num_tokens: int,
-           set_seed_tokens: bool,
            allocate_tokens_for_keyspace: str,
            instance_type: str,
            volume_type: str,
