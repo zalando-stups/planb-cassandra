@@ -865,7 +865,18 @@ def extend_cluster(options: dict):
         user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
 
         env = user_data['environment']
-        env['AUTO_BOOTSTRAP'] = 'false'
+
+        if options['allocate_tokens_for_keyspace']:
+            #
+            # This is a hack to make the token allocation kick in on pre-4.x
+            # versions.  Seed nodes are going to ignore both options anyway.
+            #
+            env['AUTO_BOOTSTRAP'] = 'true'
+            env['JVM_EXTRA_OPTS'] = '-Dcassandra.allocate_tokens_for_keyspace=' + \
+                options['allocate_tokens_for_keyspace']
+        else:
+            env['AUTO_BOOTSTRAP'] = 'false'
+
         env['DC_SUFFIX'] = options['dc_suffix']
         env['NUM_TOKENS'] = options['num_tokens']
         env.update(environment_as_dict(options.get('environment', [])))
@@ -889,10 +900,6 @@ def extend_cluster(options: dict):
             instance_profile=instance_profile
         )
         launch_seed_nodes(options)
-
-        if options['allocate_tokens_for_keyspace']:
-            env['AUTO_BOOTSTRAP'] = 'true'
-            env['JVM_EXTRA_OPTS'] = '-Dcassandra.allocate_tokens_for_keyspace=' + options['allocate_tokens_for_keyspace']
 
         # TODO: make sure all seed nodes are up
         launch_normal_nodes(options)
