@@ -11,6 +11,7 @@ import os
 
 # TODO: can we avoid the explicit list here?
 from .common import boto_client, \
+    tags_as_dict, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, get_user_data, \
@@ -51,10 +52,6 @@ def create_tags(ec2: object, resource_id: str, tags: dict):
         Tags=[{'Key': k, 'Value': v}
               for k, v in tags.items()]
     )
-
-
-def tags_as_dict(tags: list) -> dict:
-    return {t['Key']: t['Value'] for t in tags}
 
 
 def update_tags(ec2: object, resource_id: str, tags: dict):
@@ -501,12 +498,7 @@ def list_instances_to_update(ec2: object, cluster_name: str) -> list:
             return [saved_instance]
     else:
         print("Listing cluster nodes for {}".format(cluster_name))
-        alive_instances = [
-            i
-            for i in list_instances(ec2, cluster_name)
-            if 'PrivateIpAddress' in i
-        ]
-        return sorted(alive_instances, key=lambda i: i['PrivateIpAddress'])
+        return list_instances(ec2, cluster_name)
 
 
 def update_cluster(options: dict):
@@ -533,7 +525,10 @@ def update_cluster(options: dict):
         # TODO: user should hit Ctrl-c to cancel everything
         # don't ask again if resuming after crash
         if len(instances) > 1:
-            question = "Update node {}?".format(i['PrivateIpAddress'])
+            question = "Update node {} with IP {}?".format(
+                i['Tags']['Name'],
+                i['PrivateIpAddress']
+            )
             if not click.confirm(question):
                 continue
 
