@@ -493,7 +493,11 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         mappings = ami.block_device_mappings
         block_devices = override_ephemeral_block_devices(mappings)
 
-        volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
+        volume_name = '{}{}-{}'.format(
+            options['cluster_name'],
+            options['dc_suffix'],
+            ip['PrivateIp']
+        )
         create_tagged_volume(
             ec2,
             options,
@@ -523,7 +527,10 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
 
         ec2.create_tags(
             Resources=[instance_id],
-            Tags=[{'Key': 'Name', 'Value': options['cluster_name']}]
+            Tags=[{
+                'Key': 'Name',
+                'Value': options['cluster_name'] + options['dc_suffix']
+            }]
         )
         # wait for instance to initialize before we can assign a
         # public IP address to it or tag the attached volume
