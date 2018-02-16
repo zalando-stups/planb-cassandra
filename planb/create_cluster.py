@@ -431,6 +431,7 @@ def generate_taupage_user_data(options: dict) -> str:
         },
         'environment': {
             'CLUSTER_NAME': options['cluster_name'],
+            'DC_SUFFIX': options['dc_suffix'],
             'NUM_TOKENS': options['num_tokens'],
             'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
