@@ -102,6 +102,7 @@ Available options are:
 ===========================  ============================================================================
 --cluster-name               Not actually an option, you must specify the name of a cluster to create
 --cluster-size               Number of nodes to create per AWS region.  Default: 3
+--dc-suffix                  Optional "DC suffix".
 --num-tokens                 Number of virtual nodes per node.  Default: 256
 --instance-type              AWS EC2 instance type to use for the nodes.  Default: t2.medium
 --volume-type                Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
@@ -237,32 +238,34 @@ possible use-cases are::
 
 Available options for extend:
 
-===========================  ============================================================================
---from-region                Name of AWS region where a cluster is already running.
---to-region                  Name of AWS region where a new data center should be created.  This can be the same as "from region", in this case a virtual data center is created.
---cluster-name               The name of a cluster to extend.
---ring-size                  Number of nodes to create in the new data center.
---dc-suffix                  Optional "DC suffix".  When creating a virtual data center be sure to specify a new suffix for each virtual data center you create!
---num-tokens                 Number of virtual nodes per node.  Default: 256
---instance-type              AWS EC2 instance type to use for the nodes.  Default: t2.medium
---volume-type                Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
---volume-size                Size of EBS data volume in GB for every node.  Default: 16
---volume-iops                Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
---no-termination-protection  Don't protect EC2 instances from accidental termination.  Useful for testing and development.
---use-dmz                    Deploy the new data center into DMZ subnets using Public IPs (required for multi-region setup).
---hosted-zone                Specify this to create the SRV record for the new data center.  This is optional.
---artifact-name              Override Pierone artifact name.  Default: planb-cassandra-3.0
---docker-image               Override default Docker image.
---environment, -e            Extend/override environment section of Taupage user data.
---sns-topic                  Amazon SNS topic name to use for notifications about Auto-Recovery.
---sns-email                  Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
-===========================  ============================================================================
+==============================  ============================================================================
+--from-region                   Name of AWS region where a cluster is already running.
+--to-region                     Name of AWS region where a new data center should be created.  This can be the same as "from region", in this case a virtual data center is created.
+--cluster-name                  The name of a cluster to extend.
+--ring-size                     Number of nodes to create in the new data center.
+--dc-suffix                     Optional "DC suffix".  When creating a virtual data center be sure to specify a new suffix for each virtual data center you create!
+--num-tokens                    Number of virtual nodes per node.  Default: 256
+--allocate-tokens-for-keyspace  Use new token allocation algorithm, available starting with version 3.0.
+--instance-type                 AWS EC2 instance type to use for the nodes.  Default: t2.medium
+--volume-type                   Type of EBS data volume to create for every node.  Default: gp2 (General Purpose SSD).
+--volume-size                   Size of EBS data volume in GB for every node.  Default: 16
+--volume-iops                   Number of provisioned IOPS for the volumes, used only for volume type of io1.  Default: 100 (when applicable).
+--no-termination-protection     Don't protect EC2 instances from accidental termination.  Useful for testing and development.
+--use-dmz                       Deploy the new data center into DMZ subnets using Public IPs (required for multi-region setup).
+--hosted-zone                   Specify this to create the SRV record for the new data center.  This is optional.
+--artifact-name                 Override Pierone artifact name.  Default: planb-cassandra-3.0
+--docker-image                  Override default Docker image.
+--environment, -e               Extend/override environment section of Taupage user data.
+--sns-topic                     Amazon SNS topic name to use for notifications about Auto-Recovery.
+--sns-email                     Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
+==============================  ============================================================================
 
 -------------------------------
 Add a new "virtual data center"
 -------------------------------
 
-To add a new virtual data center in the same region where your existing cluster is running run the extend command like this:
+To add a new virtual data center in the same region where your existing
+cluster is running run the extend command like this:
 
 .. code-block:: bash
 
@@ -276,14 +279,45 @@ To add a new virtual data center in the same region where your existing cluster 
 
 .. important::
 
-   The new nodes are created with ``auto_bootstrap: false``.  When creating a
-   new virtual data center in the same region, you **must** specify the DC
-   suffix which doesn't exist in the region yet!  Otherwise you risk adding a
-   number of empty nodes to the cluster, which will be serving read requests
-   and your client applications will suffer from apparent data loss.
+   In this mode the new nodes are created with ``auto_bootstrap: false``.
+   When creating a new virtual data center in the same region, you **must**
+   specify the DC suffix which doesn't exist in the region yet!  Otherwise you
+   risk adding a number of empty nodes to the cluster, which will be serving
+   read requests and your client applications will suffer from apparent data
+   loss.
 
 After the command has run successfully, you need to login to each of the nodes
 in the new data center and run ``nodetool rebuild $existing_dc_name``.
+
+On version 3.0 or later it is possible to request use of the new token
+allocation algorithm.  For that, start by including the to-be-deployed virtual
+DC in the replication settings of the data keyspace, by running a CQL
+statement like the following one on one of the existing cluster nodes:
+
+.. code-block::
+
+   cqlsh> ALTER KEYSPACE mydata WITH replication = {
+       'class': 'NetworkTopologyStrategy',
+       'eu-central': 3,
+       'eu-central_new': 3
+   };
+
+Then run the extend command, specifying the
+``--allocate-tokens-for-keyspace=mydata`` as one of the options.
+
+With the new token allocation algorithm it makes sense to use a much smaller
+number of tokens than the default 256.  E.g. 16 tokens are generally enough to
+achieve balanced ownership distribution.  Use the ``--num-tokens`` option to
+set the desired number of tokens per node.
+
+.. important::
+
+   In order for the token allocation algorithm to be actually used, the
+   ``auto_bootstrap`` parameter has to be set to ``true``.  This is done
+   automatically by the deployment script.  Due to this, before you can run
+   ``nodetool rebuild`` command on the nodes of the newly deployed ring, you
+   have to run manually the following CQL command on every new node:
+   ``TRUNCATE system.available_ranges``.
 
 ----------------
 Add a new region

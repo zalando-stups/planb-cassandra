@@ -431,6 +431,7 @@ def generate_taupage_user_data(options: dict) -> str:
         },
         'environment': {
             'CLUSTER_NAME': options['cluster_name'],
+            'DC_SUFFIX': options['dc_suffix'],
             'NUM_TOKENS': options['num_tokens'],
             'SUBNET_TYPE': 'dmz' if options['use_dmz'] else 'internal',
             'SEEDS': ','.join(all_seeds),
@@ -493,7 +494,11 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
         mappings = ami.block_device_mappings
         block_devices = override_ephemeral_block_devices(mappings)
 
-        volume_name = '{}-{}'.format(options['cluster_name'], ip['PrivateIp'])
+        volume_name = '{}{}-{}'.format(
+            options['cluster_name'],
+            options['dc_suffix'],
+            ip['PrivateIp']
+        )
         create_tagged_volume(
             ec2,
             options,
@@ -523,7 +528,10 @@ def launch_instance(region: str, ip: dict, ami: object, subnet: dict,
 
         ec2.create_tags(
             Resources=[instance_id],
-            Tags=[{'Key': 'Name', 'Value': options['cluster_name']}]
+            Tags=[{
+                'Key': 'Name',
+                'Value': options['cluster_name'] + options['dc_suffix']
+            }]
         )
         # wait for instance to initialize before we can assign a
         # public IP address to it or tag the attached volume
@@ -793,7 +801,6 @@ def extend_cluster(options: dict):
 
     # TODO: don't override docker image?
     options = validate_artifact_version(options)
-    options['environment'] = environment_as_dict(options.get('environment', []))
 
     # List of IP addresses by region
     node_ips = collections.defaultdict(list)
@@ -866,8 +873,21 @@ def extend_cluster(options: dict):
         user_data = get_user_data(ec2, running_instances[0]['InstanceId'])
 
         env = user_data['environment']
-        env['AUTO_BOOTSTRAP'] = 'false'
+
+        if options['allocate_tokens_for_keyspace']:
+            #
+            # This is a hack to make the token allocation kick in on pre-4.x
+            # versions.  Seed nodes are going to ignore both options anyway.
+            #
+            env['AUTO_BOOTSTRAP'] = 'true'
+            env['JVM_EXTRA_OPTS'] = '-Dcassandra.allocate_tokens_for_keyspace=' + \
+                options['allocate_tokens_for_keyspace']
+        else:
+            env['AUTO_BOOTSTRAP'] = 'false'
+
         env['DC_SUFFIX'] = options['dc_suffix']
+        env['NUM_TOKENS'] = options['num_tokens']
+        env.update(environment_as_dict(options.get('environment', [])))
 
         new_seeds = list_all_seed_node_ips(seed_nodes)
         env['SEEDS'] = "{},{}".format(','.join(new_seeds), env['SEEDS'])
