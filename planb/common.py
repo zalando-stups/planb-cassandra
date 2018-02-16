@@ -1,5 +1,6 @@
 import boto3
 import botocore
+import netaddr
 import base64
 import yaml
 import json
@@ -49,6 +50,10 @@ def boto_client(service_name: str, region_name: str = None,
     return SessionRefreshingBotoClient(profile_name, service_name, region_name)
 
 
+def tags_as_dict(tags: list) -> dict:
+    return {t['Key']: t['Value'] for t in tags}
+
+
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
 
@@ -89,11 +94,21 @@ def dump_user_data_for_taupage(user_data: dict) -> str:
 
 
 def list_instances(ec2: object, cluster_name: str):
-    resp = ec2.describe_instances(Filters=[{
+    resp = ec2.describe_instances(Filters=[
+        {
             'Name': 'tag:Name',
             'Values': [cluster_name]
-        }])
-    return sum([r['Instances'] for r in resp['Reservations']], [])
+        },
+        {
+            'Name': 'instance-state-name',
+            'Values': ['running']
+        }
+    ])
+    all_instances = sum([r['Instances'] for r in resp['Reservations']], [])
+    return sorted([dict(i, Tags=tags_as_dict(i['Tags']))
+                   for i in all_instances],
+                  key=lambda i: (i['Tags']['Name'],
+                                 netaddr.IPAddress(i['PrivateIpAddress'])))
 
 
 def override_ephemeral_block_devices(mappings: dict) -> dict:
