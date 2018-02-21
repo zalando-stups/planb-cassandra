@@ -349,6 +349,50 @@ creating new nodes.  In general, it should be possible to override this option
 and add the nodes one by one to the existing data center, but care should be
 taken while doing so.
 
+Running commands remotely on Cassandra nodes
+============================================
+
+There is a command group called ``remote`` that allows you to run arbitrary
+shell commands on all nodes of a given Cassandra cluster.  This can be useful
+when applying a configuration change, e.g. setting compaction throughput:
+
+.. code-block:: bash
+
+    $ planb.py remote \
+        --region eu-west-1 \
+        --cluster-name mycluster \
+        --odd-host $ODDHOST \
+        --piu "setting cassandra compaction throughput" \
+        nodetool \
+        -- \
+        setcompactionthroughput 50
+
+The following options are available for the ``remote`` command:
+
+==============  ==================================================
+--cluster-name  The name of the cluster (Name tag on the EC2 instances).
+--region        AWS region.
+-O, --odd-host  Odd host name for the first SSH hop.
+--piu           Run ``piu`` first with this parameter as reason.
+--echo          Print the command before running it.
+--no-prompt     Don't prompt before running the command.
+--no-wait       Don't wait for the command to exit.
+--ip-label      Label all output from the node with its IP address.
+--help          Show this message and exit.
+==============  ==================================================
+
+There are 3 subcommands in the ``remote`` command group:
+
+========  ==============================
+shell     Run an arbitrary shell command.
+nodetool  Run a nodetool command.
+cqlsh     Run an administrative CQL shell command.
+========  ==============================
+
+The most basic is ``shell`` which allows to run any command on the server.
+Two shorthand commands for running ``nodetool`` and ``cqlsh -u admin -p
+$ADMIN_PASSWORD`` are also provided.
+
 Client configuration for Public IPs setup
 =========================================
 

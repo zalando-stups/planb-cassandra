@@ -6,6 +6,7 @@ from .common import boto_client, list_instances
 from .show_cluster import show_instances
 from .create_cluster import create_cluster, extend_cluster
 from .update_cluster import update_cluster
+from .remote_command import run_shell, run_nodetool, run_cqlsh
 
 
 def configure_logging(level):
@@ -169,10 +170,45 @@ def update(cluster_name: str,
 
 @cli.command()
 @click.option('--cluster-name', type=str, required=True)
-@click.option('--region', type=str)
+@click.option('--region', type=str, required=True)
 def nodes(region: str, cluster_name: str):
     # TODO: we should extend it to list of regions
     # TODO: we could derive the regions a cluster is deployed to from SRV DNS record
     ec2 = boto_client('ec2', region)
     instances = list_instances(ec2, cluster_name)
     show_instances(instances)
+
+
+@cli.group()
+@click.option('--cluster-name', type=str, required=True)
+@click.option('--region', type=str, required=True)
+@click.option('--odd-host', '-O', type=str, required=True)
+@click.option('--piu', type=str, help="Run piu first with this parameter as reason.")
+@click.option('--echo', is_flag=True, help="Print the ssh command before running it.")
+@click.option('--no-prompt', is_flag=True, help="Don't prompt before running the ssh command.")
+@click.option('--no-wait', is_flag=True, help="Don't wait for the ssh command to exit.")
+@click.option('--ip-label', is_flag=True, help="Label all output from the node with its IP address.")
+@click.pass_context
+def remote(ctx: object, **kwargs):
+    ctx.obj = kwargs
+
+
+@remote.command(help='Run shell command on Cassandra nodes.')
+@click.argument('command', nargs=-1)
+@click.pass_context
+def shell(ctx: object, command: list):
+    run_shell(**dict(ctx.obj, command=command))
+
+
+@remote.command(help='Run nodetool command on Cassandra nodes.')
+@click.argument('command', nargs=-1)
+@click.pass_context
+def nodetool(ctx: object, command: list):
+    run_nodetool(**dict(ctx.obj, command=command))
+
+
+@remote.command(help='Run admin cqlsh command on Cassandra nodes.')
+@click.argument('command', nargs=-1)
+@click.pass_context
+def cqlsh(ctx: object, command: list):
+    run_cqlsh(**dict(ctx.obj, command=command))
