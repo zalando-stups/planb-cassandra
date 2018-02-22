@@ -5,7 +5,7 @@ MAINTAINER Zalando SE
 # SSL Storage Port, JMX, Jolokia Agent, CQL Native
 EXPOSE 7001 7199 8778 9042
 
-ENV CASSIE_VERSION=2.2.11
+ENV CASSIE_VERSION=2.2.12
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN echo "deb http://www.apache.org/dist/cassandra/debian 22x main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
