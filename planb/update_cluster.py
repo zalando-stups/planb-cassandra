@@ -71,7 +71,8 @@ def get_instance(ec2: object, instance_id: str) -> dict:
         logger.error("Unexpected number of reservations for {}: {} != 1"
                      .format(instance_id, len(reservations)))
         return None
-    return reservations[0]['Instances'][0]
+    instance = reservations[0]['Instances'][0]
+    return dict(instance, Tags=tags_as_dict(instance.get('Tags', [])))
 
 
 def get_volume(ec2: object, volume_id: str) -> dict:
@@ -324,7 +325,7 @@ def configure_instance(ec2: object, volume: dict, saved_instance: dict,
         return
 
     instance_id = instance['InstanceId']
-    ec2.create_tags(Resources=[instance_id], Tags=saved_instance['Tags'])
+    create_tags(ec2, instance_id, saved_instance['Tags'])
 
     region = options['region']
     alarm_sns_topic_arn = None

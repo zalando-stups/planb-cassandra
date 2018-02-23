@@ -109,7 +109,7 @@ def list_instances(ec2: object, cluster_name: str):
         }
     ])
     all_instances = sum([r['Instances'] for r in resp['Reservations']], [])
-    return sorted([dict(i, Tags=tags_as_dict(i['Tags']))
+    return sorted([dict(i, Tags=tags_as_dict(i.get('Tags', [])))
                    for i in all_instances],
                   key=lambda i: (i['Tags']['Name'],
                                  netaddr.IPAddress(i['PrivateIpAddress'])))
