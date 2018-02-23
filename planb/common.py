@@ -54,6 +54,10 @@ def tags_as_dict(tags: list) -> dict:
     return {t['Key']: t['Value'] for t in tags}
 
 
+def select_keys(d: dict, keys: list):
+    return {k: v for k, v in d.items() if k in keys}
+
+
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
 

@@ -1,18 +1,14 @@
 from unittest.mock import MagicMock
-from planb.update_cluster import select_keys, tags_as_dict, \
-    get_user_data, build_run_instances_params
+from planb.update_cluster import get_volume_name_tag, get_user_data, \
+    build_run_instances_params
 
 
-def test_select_keys():
-    assert select_keys({'a': 1, 'b': 2, 'c': 3}, ['a', 'c']) == {'a': 1, 'c': 3}
-
-
-def test_tags_as_dict():
-    taglist = [{'Key': 'key1', 'Value': 'val1'},
-               {'Key': 'key2', 'Value': 'val2'}]
-    tagdict = {'key1': 'val1',
-               'key2': 'val2'}
-    assert tags_as_dict(taglist) == tagdict
+def test_volume_name_tag():
+    instance = {
+        'PrivateIpAddress': '12.34',
+        'Tags': {'Name': 'my-cluster'}
+    }
+    assert get_volume_name_tag(instance) == 'my-cluster-12.34'
 
 
 def test_get_user_data():
@@ -37,7 +33,7 @@ def test_build_run_instances_params():
         'SubnetId': 'sn-123',
         'PrivateIpAddress': '172.31.128.11',
         'IamInstanceProfile': {'Arn': 'arn:barn', 'Id': '123'},
-        'Tags': [{'Key': 'Name', 'Value': 'my-cluster-name'}],
+        'Tags': {'Name': 'my-cluster-name'},
         'UserData': {
             'source': 'docker.registry/cassandra:101',
             'mounts': {
@@ -52,7 +48,7 @@ def test_build_run_instances_params():
         }
     }
     options = {
-        'cluster_name': 'my-cluster-name',
+        'cluster_name': 'my-cluster-name*',
         'docker_image': 'docker.registry/cassandra:123',
         'taupage_ami_id': 'ami-654321',
         'instance_type': 'm4.xlarge',
@@ -111,7 +107,7 @@ def test_preserve_original_scalyr_key():
         'SubnetId': 'sn-123',
         'PrivateIpAddress': '172.31.128.11',
         'IamInstanceProfile': {'Arn': 'arn:barn', 'Id': '123'},
-        'Tags': [{'Key': 'Name', 'Value': 'my-cluster-name'}],
+        'Tags': {'Name': 'my-cluster-name'},
         'UserData': {
             'source': 'docker.registry/cassandra:101',
             'mounts': {
