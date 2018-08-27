@@ -54,6 +54,10 @@ def tags_as_dict(tags: list) -> dict:
     return {t['Key']: t['Value'] for t in tags}
 
 
+def select_keys(d: dict, keys: list):
+    return {k: v for k, v in d.items() if k in keys}
+
+
 def json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
 
@@ -105,7 +109,7 @@ def list_instances(ec2: object, cluster_name: str):
         }
     ])
     all_instances = sum([r['Instances'] for r in resp['Reservations']], [])
-    return sorted([dict(i, Tags=tags_as_dict(i['Tags']))
+    return sorted([dict(i, Tags=tags_as_dict(i.get('Tags', [])))
                    for i in all_instances],
                   key=lambda i: (i['Tags']['Name'],
                                  netaddr.IPAddress(i['PrivateIpAddress'])))

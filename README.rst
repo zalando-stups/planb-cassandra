@@ -191,6 +191,11 @@ Available options for update:
 --sns-email          Email address to subscribe to Amazon SNS notification topic.  See description of ``create`` subcommand above for details.
 ===================  ========================================================
 
+The cluster name parameter is used to list all EC2 instances in the region
+with the matching ``Name`` tag.  This parameter may contain wildcards (``*``).
+For example, if you have multiple virtual data centers in a cluster, this
+allows to update all nodes of all DCs by running only one command.
+
 Update is an interactive command which operates on one node at a time.
 It will prompt before starting update of each node.  It starts by draining the
 target node and then terminates the EC2 instance that is running it.  Then a new
@@ -202,10 +207,6 @@ node.  This keeps all the node's data and identification within the cluster inta
 The command will wait for the replacement node to be back UP.  You should still
 monitor the status of the cluster to verify that all other nodes also see the new
 node as UP before proceeding.
-
-The command will refuse to proceed if some nodes are DOWN.  This could be a false
-positive, however if some nodes were decommissioned recently (it takes about 72 hours
-for this state to clear).
 
 While performing the update, which destroys the running EC2 instance and creates a
 blank one, the command keeps the current state in the tags of the EBS data volume.

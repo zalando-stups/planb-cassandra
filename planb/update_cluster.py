@@ -11,7 +11,7 @@ import os
 
 # TODO: can we avoid the explicit list here?
 from .common import boto_client, \
-    tags_as_dict, \
+    tags_as_dict, select_keys, \
     dump_dict_as_file, load_dict_from_file, \
     dump_user_data_for_taupage, list_instances, \
     override_ephemeral_block_devices, get_user_data, \
@@ -35,10 +35,6 @@ jolokia_url = "http://localhost:{}/jolokia/".format(local_jolokia_port)
 
 def text_timestamp():
     return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-
-
-def select_keys(d: dict, keys: list):
-    return {k: v for k, v in d.items() if k in keys}
 
 
 def create_tags(ec2: object, resource_id: str, tags: dict):
@@ -75,7 +71,8 @@ def get_instance(ec2: object, instance_id: str) -> dict:
         logger.error("Unexpected number of reservations for {}: {} != 1"
                      .format(instance_id, len(reservations)))
         return None
-    return reservations[0]['Instances'][0]
+    instance = reservations[0]['Instances'][0]
+    return dict(instance, Tags=tags_as_dict(instance.get('Tags', [])))
 
 
 def get_volume(ec2: object, volume_id: str) -> dict:
@@ -83,16 +80,21 @@ def get_volume(ec2: object, volume_id: str) -> dict:
     return resp['Volumes'][0]
 
 
-def tag_instance_volume(
-        ec2: object, volume: dict, tags: dict, instance: dict,
-        cluster_name: str):
+def get_volume_name_tag(instance: dict) -> str:
+    return "{}-{}".format(
+        instance['Tags']['Name'],
+        instance['PrivateIpAddress']
+    )
+
+
+def tag_instance_volume(ec2: object, volume: dict, tags: dict, instance: dict):
     new_tags = {
         'planb:operation': 'update',
         'planb:operation:start-time': text_timestamp(),
         'planb:operation:state': 'init'
     }
 
-    desired_name_tag = "{}-{}".format(cluster_name, instance['PrivateIpAddress'])
+    desired_name_tag = get_volume_name_tag(instance)
     if tags.get('Name') != desired_name_tag:
         new_tags['Name'] = desired_name_tag
 
@@ -224,9 +226,9 @@ def build_run_instances_params(
     if 'IamInstanceProfile' in saved_instance:
         profile = saved_instance['IamInstanceProfile']
     else:
-        profile = ensure_instance_profile(options['cluster_name'])
-
+        profile = ensure_instance_profile(saved_instance['Tags']['Name'])
     instance_profile = {'Arn': profile['Arn']}
+
     params = dict(
         params,
         MinCount=1,
@@ -251,8 +253,7 @@ def build_run_instances_params(
     user_data_changes = {
         'volumes': {
             'ebs': {
-                '/dev/xvdf': "{}-{}".format(options['cluster_name'],
-                                            saved_instance['PrivateIpAddress'])
+                '/dev/xvdf': get_volume_name_tag(saved_instance)
             }
         }
     }
@@ -324,7 +325,7 @@ def configure_instance(ec2: object, volume: dict, saved_instance: dict,
         return
 
     instance_id = instance['InstanceId']
-    ec2.create_tags(Resources=[instance_id], Tags=saved_instance['Tags'])
+    create_tags(ec2, instance_id, saved_instance['Tags'])
 
     region = options['region']
     alarm_sns_topic_arn = None
@@ -333,7 +334,7 @@ def configure_instance(ec2: object, volume: dict, saved_instance: dict,
 
     create_auto_recovery_alarm(
         region,
-        options['cluster_name'],
+        saved_instance['Tags']['Name'],
         instance_id,
         alarm_sns_topic_arn
     )
@@ -550,7 +551,7 @@ def update_cluster(options: dict):
             volume = get_volume(ec2, volume_id)
             tags = tags_as_dict(volume.get('Tags', []))
             if 'planb:operation:state' not in tags:
-                tag_instance_volume(ec2, volume, tags, i, options['cluster_name'])
+                tag_instance_volume(ec2, volume, tags, i)
 
             while step_forward(ec2, volume_id, options):
                 time.sleep(5)
