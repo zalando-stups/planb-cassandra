@@ -282,8 +282,14 @@ JVM_OPTS="$JVM_OPTS -Djava.net.preferIPv4Stack=true"
 #
 LOCAL_JMX=not-only
 
+#
+# Starting the JMX server adds a forced GC every hour that can cause read
+# latency spikes, so we disable it here:
+#
+JVM_OPTS="$JVM_OPTS -XX:+DisableExplicitGC"
+
 if [ "$LOCAL_JMX" = "yes" ]; then
-  JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT -XX:+DisableExplicitGC"
+  JVM_OPTS="$JVM_OPTS -Dcassandra.jmx.local.port=$JMX_PORT"
 else
   JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.port=$JMX_PORT"
   JVM_OPTS="$JVM_OPTS -Dcom.sun.management.jmxremote.rmi.port=$JMX_PORT"
