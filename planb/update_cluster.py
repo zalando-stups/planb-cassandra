@@ -515,11 +515,13 @@ def update_cluster(options: dict):
     options = dict(options, alarm_topics=alarm_topics)
     options['environment'] = environment_as_dict(options.get('environment', []))
 
+    should_prompt = not(options['no_prompt'])
+
     # TODO: List all nodes with IPs and some status information
     for i in instances:
         # TODO: user should hit Ctrl-c to cancel everything
         # don't ask again if resuming after crash
-        if len(instances) > 1:
+        if len(instances) > 1 and should_prompt:
             logger.warn("-----------------------------------------------")
             logger.warn("!!! Check your monitoring before proceeding !!!")
             logger.warn("-----------------------------------------------")
