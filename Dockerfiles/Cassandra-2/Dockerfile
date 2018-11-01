@@ -8,20 +8,16 @@ EXPOSE 7001 7199 8778 9042
 ENV CASSIE_VERSION=2.1.20
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
+RUN apt-get -y install apt-utils gnupg
+
 RUN echo "deb http://www.apache.org/dist/cassandra/debian 21x main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
 RUN curl https://www.apache.org/dist/cassandra/KEYS | apt-key add -
+RUN apt-get -y update
 
-RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-missing dist-upgrade
-RUN apt-get -y install vim less sysstat maven \
+RUN apt-get -y install vim less sysstat \
     cassandra=$CASSIE_VERSION \
     cassandra-tools=$CASSIE_VERSION && \
-    twcs_commit=f6326a60746d4d5e01ba565427dd46de3df37806 && \
-    curl -sL https://github.com/jeffjirsa/twcs/archive/${twcs_commit}.tar.gz | tar xz -C /usr/src && \
-    cd /usr/src/twcs-${twcs_commit}/TimeWindowCompactionStrategy && \
-    mvn package && \
-    mv target/TimeWindowCompactionStrategy-2.1.12.jar /usr/share/cassandra/lib/ && \
-    rm -rf target ~/.m2 && \
-    apt-get -y remove maven && \
     apt-get -y autoremove && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
