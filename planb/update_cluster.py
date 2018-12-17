@@ -13,7 +13,7 @@ import os
 from .common import boto_client, \
     tags_as_dict, select_keys, \
     dump_dict_as_file, load_dict_from_file, \
-    dump_user_data_for_taupage, list_instances, \
+    dump_user_data_for_taupage, get_instance, list_instances, \
     override_ephemeral_block_devices, get_user_data, \
     setup_sns_topics_for_alarm, create_auto_recovery_alarm, \
     ensure_instance_profile, environment_as_dict
@@ -62,17 +62,6 @@ def set_error_state(ec2: object, volume: dict, message: str):
         ec2, volume['VolumeId'],
         {'planb:operation:state': 'failed', 'planb:update:fail-reason': message}
     )
-
-
-def get_instance(ec2: object, instance_id: str) -> dict:
-    resp = ec2.describe_instances(InstanceIds=[instance_id])
-    reservations = resp['Reservations']
-    if len(reservations) != 1:
-        logger.error("Unexpected number of reservations for {}: {} != 1"
-                     .format(instance_id, len(reservations)))
-        return None
-    instance = reservations[0]['Instances'][0]
-    return dict(instance, Tags=tags_as_dict(instance.get('Tags', [])))
 
 
 def get_volume(ec2: object, volume_id: str) -> dict:

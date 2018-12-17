@@ -6,6 +6,7 @@ from .common import boto_client, list_instances
 from .show_cluster import show_instances
 from .create_cluster import create_cluster, extend_cluster
 from .update_cluster import update_cluster
+from .alarm import set_auto_recovery_alarm
 from .remote_command import run_shell, run_nodetool, run_cqlsh
 
 
@@ -168,6 +169,19 @@ def update(cluster_name: str,
            sns_email: str):
 
     update_cluster(options=locals())
+
+
+@cli.command()
+@click.option('--region', type=str, required=True)
+@click.option('--instance-id', type=str, required=True)
+@click.option('--sns-topic', help=sns_topic_help)
+@click.option('--sns-email', help=sns_email_help)
+def setalarm(region: str,
+             instance_id: str,
+             sns_topic: str,
+             sns_email: str):
+
+    set_auto_recovery_alarm(options=locals())
 
 
 @cli.command()

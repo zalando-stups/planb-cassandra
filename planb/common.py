@@ -115,6 +115,17 @@ def list_instances(ec2: object, cluster_name: str):
                                  netaddr.IPAddress(i['PrivateIpAddress'])))
 
 
+def get_instance(ec2: object, instance_id: str) -> dict:
+    resp = ec2.describe_instances(InstanceIds=[instance_id])
+    reservations = resp['Reservations']
+    if len(reservations) != 1:
+        logger.error("Unexpected number of reservations for {}: {} != 1"
+                     .format(instance_id, len(reservations)))
+        return None
+    instance = reservations[0]['Instances'][0]
+    return dict(instance, Tags=tags_as_dict(instance.get('Tags', [])))
+
+
 def override_ephemeral_block_devices(mappings: dict) -> dict:
     #
     # Override any ephemeral volumes with NoDevice mapping,
