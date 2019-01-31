@@ -241,14 +241,13 @@ JVM_OPTS="$JVM_OPTS -XX:+PrintGCApplicationStoppedTime"
 JVM_OPTS="$JVM_OPTS -XX:+PrintPromotionFailure"
 # JVM_OPTS="$JVM_OPTS -XX:PrintFLSStatistics=1"
 
-# Don't specify the file, we want the GC logs on stdout.
 # JVM_OPTS="$JVM_OPTS -Xloggc:/var/log/cassandra/gc-`date +%s`.log"
 # If you are using JDK 6u34 7u2 or later you can enable GC log rotation
 # don't stick the date in the log name if rotation is on.
-# JVM_OPTS="$JVM_OPTS -Xloggc:/var/log/cassandra/gc.log"
-# JVM_OPTS="$JVM_OPTS -XX:+UseGCLogFileRotation"
-# JVM_OPTS="$JVM_OPTS -XX:NumberOfGCLogFiles=10"
-# JVM_OPTS="$JVM_OPTS -XX:GCLogFileSize=10M"
+JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_HOME}/logs/gc.log"
+JVM_OPTS="$JVM_OPTS -XX:+UseGCLogFileRotation"
+JVM_OPTS="$JVM_OPTS -XX:NumberOfGCLogFiles=10"
+JVM_OPTS="$JVM_OPTS -XX:GCLogFileSize=10M"
 
 # Configure the following for JEMallocAllocator and if jemalloc is not available in the system
 # library path (Example: /usr/local/lib/). Usually "make install" will do the right thing.

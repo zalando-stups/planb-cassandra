@@ -122,8 +122,7 @@ case "$jvm" in
 esac
 
 #GC log path has to be defined here because it needs to access CASSANDRA_HOME
-# Don't specify the file, we want the GC logs on stdout.
-#JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_HOME}/logs/gc.log"
+JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_HOME}/logs/gc.log"
 
 # Here we create the arguments that will get passed to the jvm when
 # starting cassandra.

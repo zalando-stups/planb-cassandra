@@ -102,7 +102,8 @@
 -XX:+PrintGCApplicationStoppedTime
 -XX:+PrintPromotionFailure
 #-XX:PrintFLSStatistics=1
+# The location of log file is specfied in cassandra-env.sh
 #-Xloggc:/var/log/cassandra/gc.log
-#-XX:+UseGCLogFileRotation
-#-XX:NumberOfGCLogFiles=10
-#-XX:GCLogFileSize=10M
+-XX:+UseGCLogFileRotation
+-XX:NumberOfGCLogFiles=10
+-XX:GCLogFileSize=10M
