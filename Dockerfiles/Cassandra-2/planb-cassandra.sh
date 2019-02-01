@@ -57,6 +57,8 @@ fi
 echo "Broadcast IP address is $BROADCAST_ADDRESS ..."
 
 export CASSANDRA_DATA_DIR=${CASSANDRA_DATA_DIR:-/var/lib/cassandra}
+export CASSANDRA_LOGS_DIR="${CASSANDRA_DATA_DIR}/logs"
+mkdir -p "$CASSANDRA_LOGS_DIR"
 
 if [ -z "$TRUSTSTORE" ]; then
     echo "TRUSTSTORE must be set (base64 encoded)."
