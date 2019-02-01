@@ -244,7 +244,7 @@ JVM_OPTS="$JVM_OPTS -XX:+PrintPromotionFailure"
 # JVM_OPTS="$JVM_OPTS -Xloggc:/var/log/cassandra/gc-`date +%s`.log"
 # If you are using JDK 6u34 7u2 or later you can enable GC log rotation
 # don't stick the date in the log name if rotation is on.
-JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_HOME}/logs/gc.log"
+JVM_OPTS="$JVM_OPTS -Xloggc:${CASSANDRA_DATA_DIR}/logs/gc.log"
 JVM_OPTS="$JVM_OPTS -XX:+UseGCLogFileRotation"
 JVM_OPTS="$JVM_OPTS -XX:NumberOfGCLogFiles=10"
 JVM_OPTS="$JVM_OPTS -XX:GCLogFileSize=10M"
