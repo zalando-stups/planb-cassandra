@@ -57,7 +57,8 @@ def test_build_run_instances_params():
             'key2': 'value2'
         },
         'scalyr_region': 'eu',
-        'scalyr_key': 'new-shiny-scalyr-key'
+        'scalyr_key': 'new-shiny-scalyr-key',
+        'rsyslog_format': 'log-format'
     }
     expected = {
         'MinCount': 1,
@@ -87,7 +88,8 @@ def test_build_run_instances_params():
                 'key2': 'value2'
             },
             'scalyr_region': 'eu',
-            'scalyr_account_key': 'new-shiny-scalyr-key'
+            'scalyr_account_key': 'new-shiny-scalyr-key',
+            'rsyslog_application_log_format': 'log-format'
         }
     }
     actual = build_run_instances_params(ec2, saved_instance, options)

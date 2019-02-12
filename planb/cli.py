@@ -60,6 +60,7 @@ sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 @click.option('--hosted-zone', help='create SRV records in this Hosted Zone')
 @click.option('--scalyr-region')
 @click.option('--scalyr-key')
+@click.option('--rsyslog-format')
 @click.option('--artifact-name', help='Pierone artifact name to use (default: planb-cassandra-3.0)')
 @click.option('--docker-image', help='Docker image to use (default: latest planb-cassandra-3.0)')
 @click.option('--environment', '-e', multiple=True)
@@ -79,6 +80,7 @@ def create(regions: list,
            hosted_zone: str,
            scalyr_region: str,
            scalyr_key: str,
+           rsyslog_format: str,
            artifact_name: str,
            docker_image: str,
            environment: list,
@@ -151,6 +153,7 @@ def extend(from_region: str,
 @click.option('--instance-type', type=str)
 @click.option('--scalyr-region')
 @click.option('--scalyr-key')
+@click.option('--rsyslog-format')
 @click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
@@ -164,6 +167,7 @@ def update(cluster_name: str,
            instance_type: str,
            scalyr_region: str,
            scalyr_key: str,
+           rsyslog_format: str,
            environment: list,
            sns_topic: str,
            sns_email: str):

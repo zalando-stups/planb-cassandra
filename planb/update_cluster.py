@@ -266,6 +266,10 @@ def build_run_instances_params(
     if scalyr_key:
         user_data_changes['scalyr_account_key'] = scalyr_key
 
+    log_format = options.get('rsyslog_format')
+    if log_format:
+        user_data_changes['rsyslog_application_log_format'] = log_format
+
     params['UserData'].update(user_data_changes)
     return params
 

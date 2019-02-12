@@ -455,6 +455,9 @@ def generate_taupage_user_data(options: dict) -> str:
     if options['scalyr_region']:
         data['scalyr_region'] = options['scalyr_region']
 
+    if options['rsyslog_format']:
+        data['rsyslog_application_log_format'] = options['rsyslog_format']
+
     if options['environment']:
         data['environment'].update(options['environment'])
 
