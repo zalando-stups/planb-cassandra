@@ -480,8 +480,9 @@ Scaling out cluster
 It is possible to manually scale out already deployed cluster by
 following these steps:
 
-#. Increase replication factor of ``system_auth`` keyspace to the
-   desired new total number of nodes in every region affected.
+#. Increase replication factor of ``system_auth`` keyspace (if needed)
+   in every region affected.  Don't set RFs to be more than 5 per region
+   or virtual DC.
 
    For example, if you run in two regions and want to scale to 5 nodes
    per region, issue the following CQL command on any of the nodes:
