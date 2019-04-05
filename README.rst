@@ -5,7 +5,7 @@ Plan B Cassandra
 Bootstrap and update a Cassandra cluster on STUPS_/AWS.
 
 Planb deploys Cassandra by means of individual EC2 instances running Taupage_ & Docker with the latest
-Cassandra version 3.0.x (default, the new 'tick-tock' releases 3.x and older version 2.1
+Cassandra version 3.0.x (default; the new 'tick-tock' releases 3.x and older 2.x versions
 are still available).
 
 Features:
