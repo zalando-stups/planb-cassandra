@@ -17,7 +17,7 @@ function build_docker() {
     image_suffix=$3
 
     cd "Dockerfiles/Cassandra-${dir_suffix}/"
-    scm-source
+    scm-source --fail-on-modified
 
     TAG="${PIERONE_URL}/stups/planb-cassandra-${image_suffix}:${version}_${DATE_TAG}"
 
