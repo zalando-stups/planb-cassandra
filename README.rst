@@ -507,6 +507,9 @@ following these steps:
 #. Create a ``Name`` tag on the volume in the format:
    ``<cluster-name>-<private-ip>``.
 
+#. Create an additional tag on the newly created **empty EBS volume:**
+   the tag name should be ``Taupage:erase-on-boot`` and the value ``True``.
+
 #. Use the 'Launch More Like This' menu in the AWS web console on one
    of the running nodes.
 
