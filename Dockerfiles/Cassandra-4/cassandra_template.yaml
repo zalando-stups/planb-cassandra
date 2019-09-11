@@ -1042,7 +1042,7 @@ dynamic_snitch_badness_threshold: 0.1
 #
 server_encryption_options:
     # set to true for allowing secure incoming connections
-    enabled: false
+    enabled: true
     # If enabled and optional are both set to true, encrypted and unencrypted connections are handled on the storage_port
     optional: false
     # if enabled, will open up an encrypted listening socket on ssl_storage_port. Should be used
