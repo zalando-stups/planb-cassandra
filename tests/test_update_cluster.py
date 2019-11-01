@@ -34,6 +34,9 @@ def test_build_run_instances_params():
         'PrivateIpAddress': '172.31.128.11',
         'IamInstanceProfile': {'Arn': 'arn:barn', 'Id': '123'},
         'Tags': {'Name': 'my-cluster-name'},
+        'Monitoring': {
+            'State': 'enabled'
+        },
         'UserData': {
             'source': 'docker.registry/cassandra:101',
             'mounts': {
@@ -70,6 +73,7 @@ def test_build_run_instances_params():
         'PrivateIpAddress': '172.31.128.11',
         'BlockDeviceMappings': [],
         'IamInstanceProfile': {'Arn': 'arn:barn'},
+        'Monitoring': {'Enabled': True},
         'UserData': {
             'source': 'docker.registry/cassandra:123',
             'volumes': {

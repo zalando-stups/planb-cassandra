@@ -239,6 +239,9 @@ def build_run_instances_params(
     mappings = override_ephemeral_block_devices(image['BlockDeviceMappings'])
     params['BlockDeviceMappings'] = mappings
 
+    if saved_instance.get('Monitoring', {}).get('State') == 'enabled':
+        params['Monitoring'] = {'Enabled': True}
+
     user_data_changes = {
         'volumes': {
             'ebs': {
