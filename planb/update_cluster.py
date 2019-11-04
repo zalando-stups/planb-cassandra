@@ -473,7 +473,9 @@ def is_local_jolokia_port_open() -> bool:
     return rcode == 0
 
 
-def list_instances_to_update(ec2: object, cluster_name: str) -> list:
+def list_instances_to_update(
+        ec2: object, cluster_name: str, extra_filters: list) -> list:
+
     dumps = list_instance_dump_files()
     if dumps:
         if len(dumps) > 1:
@@ -488,13 +490,23 @@ def list_instances_to_update(ec2: object, cluster_name: str) -> list:
         if click.confirm(msg):
             return [saved_instance]
     else:
-        print("Listing cluster nodes for {}".format(cluster_name))
-        return list_instances(ec2, cluster_name)
+        logger.info("Listing cluster nodes for {}".format(cluster_name))
+        instances = list_instances(ec2, cluster_name, extra_filters)
+        if instances:
+            logger.info("Found {} instances to update".format(len(instances)))
+        else:
+            logger.warn(
+                "No running instances found with the specified parameters!"
+            )
+        return instances
 
 
 def update_cluster(options: dict):
     ec2 = boto_client('ec2', options['region'])
-    instances = list_instances_to_update(ec2, options['cluster_name'])
+
+    instances = list_instances_to_update(
+        ec2, options['cluster_name'], options['filters']
+    )
     if not instances:
         return
 

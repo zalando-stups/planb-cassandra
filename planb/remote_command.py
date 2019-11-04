@@ -42,9 +42,11 @@ def run_on_instance(
             subprocess.call(cmd)
 
 
-def run_shell(command: list, cluster_name: str, region: str, **kwargs):
+def run_shell(
+        command: list, cluster_name: str, region: str, filters: list, **kwargs):
+
     ec2 = boto_client('ec2', region)
-    instances = list_instances(ec2, cluster_name)
+    instances = list_instances(ec2, cluster_name, filters)
     if not instances:
         msg = "No running instances found in region {} with Name tag '{}'".format(
             region,

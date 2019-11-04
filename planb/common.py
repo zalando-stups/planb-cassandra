@@ -97,8 +97,10 @@ def dump_user_data_for_taupage(user_data: dict) -> str:
     return '#taupage-ami-config\n{}'.format(yaml.safe_dump(user_data))
 
 
-def list_instances(ec2: object, cluster_name: str):
-    resp = ec2.describe_instances(Filters=[
+def list_instances(
+        ec2: object, cluster_name: str, extra_filters: list = None) -> list:
+
+    filters = [
         {
             'Name': 'tag:Name',
             'Values': [cluster_name]
@@ -107,7 +109,12 @@ def list_instances(ec2: object, cluster_name: str):
             'Name': 'instance-state-name',
             'Values': ['running']
         }
-    ])
+    ]
+    if extra_filters:
+        filters.extend(extra_filters)
+
+    resp = ec2.describe_instances(Filters=filters)
+
     all_instances = sum([r['Instances'] for r in resp['Reservations']], [])
     return sorted([dict(i, Tags=tags_as_dict(i.get('Tags', [])))
                    for i in all_instances],

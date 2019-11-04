@@ -167,19 +167,21 @@ the last used node.
 
     $ zaws re $ACCOUNT  # for longer updates run `zaws login -r` in background
     $ piu re -O $ODDHOST $ODDHOST  # for longer updates add `-t 180` or bigger
-    $ ./planb.py update --cluster-name mycluster \
-        --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 \
+    $ ./planb.py update \
         --region eu-central-1 \
         --odd-host $ODDHOST \
+        --cluster-name mycluster \
+        --docker-image registry.opensource.zalan.do/stups/planb-cassandra-3.0:cd-69 \
         --sns-topic planb-cassandra-system-event \
         --sns-email test@example.com
 
 Available options for update:
 
 ===================  ========================================================
---cluster-name       The name of your cluster (required)
---odd-host           The Odd host in the region of your VPC (required)
 --region             The region where the update should be applied (required)
+--odd-host           The Odd host in the region of your VPC (required)
+--cluster-name       The name of your cluster (required)
+--filters            Additional AWS resource filters (in JSON format)
 --force-termination  Disable termination protection for the duration of update
 --no-prompt          Don't prompt before updating every node.
 --docker-image       The full specified name of the Docker image
@@ -196,6 +198,11 @@ The cluster name parameter is used to list all EC2 instances in the region
 with the matching ``Name`` tag.  This parameter may contain wildcards (``*``).
 For example, if you have multiple virtual data centers in a cluster, this
 allows to update all nodes of all DCs by running only one command.
+
+Any additional resource filters supported by AWS may be provided (only JSON
+format is supported, though).  For example, to limit the update operation to a
+specific Availability Zone, add the following parameter: ``--filters
+'[{"Name":"availability-zone","Values":["eu-central-1c"]}]'``.
 
 By default, ``update`` is an interactive command which operates on one node at a time.
 It will prompt before starting update of each node.  It starts by draining the
@@ -365,8 +372,8 @@ when applying a configuration change, e.g. setting compaction throughput:
 
     $ planb.py remote \
         --region eu-west-1 \
-        --cluster-name mycluster \
         --odd-host $ODDHOST \
+        --cluster-name mycluster \
         --piu "setting cassandra compaction throughput" \
         nodetool \
         -- \
@@ -375,9 +382,10 @@ when applying a configuration change, e.g. setting compaction throughput:
 The following options are available for the ``remote`` command:
 
 ==============  ==================================================
---cluster-name  The name of the cluster (Name tag on the EC2 instances).
 --region        AWS region.
--O, --odd-host  Odd host name for the first SSH hop.
+--odd-host      Odd host name for the first SSH hop.
+--cluster-name  The name of the cluster (Name tag on the EC2 instances).
+--filters       Additional AWS resource filters (in JSON format)
 --piu           Run ``piu`` first with this parameter as reason.
 --echo          Print the command before running it.
 --no-prompt     Don't prompt before running the command.

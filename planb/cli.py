@@ -1,4 +1,5 @@
 import re
+import json
 import click
 import logging
 
@@ -35,12 +36,32 @@ def validate_dc_suffix(ctx, param, value):
     return value
 
 
+def is_valid_filter(f: dict) -> bool:
+    return isinstance(f, dict) and \
+           isinstance(f.get('Name'), str) and \
+           isinstance(f.get('Values'), list)
+
+
+def validate_filters(ctx, param, value):
+    try:
+        filters = json.loads(value)
+    except Exception as e:
+        raise click.BadParameter("JSON parsing error: {}".format(e))
+
+    if not (isinstance(filters, list) and
+            all(is_valid_filter(f) for f in filters)):
+        raise click.BadParameter("has to match schema {}".format(filters_schema_doc))
+    return filters
+
+
 @click.group()
 @click.option('--debug', is_flag=True, default=False)
 def cli(debug: bool):
     configure_logging(logging.DEBUG if debug else logging.INFO)
 
 
+filters_schema_doc = "[{\"Name\":\"string\",\"Values\":[\"string\",...]},...]"
+filters_help = 'Additional AWS resource filters: {}'.format(filters_schema_doc)
 sns_topic_help = 'SNS topic name to send Auto-Recovery notifications to'
 sns_email_help = 'Email address to subscribe to Auto-Recovery SNS topic'
 
@@ -143,9 +164,11 @@ def extend(from_region: str,
 
 
 @cli.command()
-@click.option('--cluster-name', type=str, required=True)
-@click.option('--odd-host', '-O', type=str, required=True)
 @click.option('--region', type=str, required=True)
+@click.option('--odd-host', '-O', type=str, required=True)
+@click.option('--cluster-name', type=str, required=True)
+@click.option('--filters', type=str, default="[]", callback=validate_filters,
+              required=False, help=filters_help)
 @click.option('--force-termination', is_flag=True, default=False)
 @click.option('--no-prompt', is_flag=True, default=False)
 @click.option('--docker-image', type=str)
@@ -157,9 +180,10 @@ def extend(from_region: str,
 @click.option('--environment', '-e', multiple=True)
 @click.option('--sns-topic', help=sns_topic_help)
 @click.option('--sns-email', help=sns_email_help)
-def update(cluster_name: str,
+def update(region: str,
            odd_host: str,
-           region: str,
+           cluster_name: str,
+           filters: list,
            force_termination: bool,
            no_prompt: bool,
            docker_image: str,
@@ -189,20 +213,24 @@ def setalarm(region: str,
 
 
 @cli.command()
-@click.option('--cluster-name', type=str, required=True)
 @click.option('--region', type=str, required=True)
-def nodes(region: str, cluster_name: str):
+@click.option('--cluster-name', type=str, required=True)
+@click.option('--filters', type=str, default="[]", callback=validate_filters,
+              required=False, help=filters_help)
+def nodes(region: str, cluster_name: str, filters: list):
     # TODO: we should extend it to list of regions
     # TODO: we could derive the regions a cluster is deployed to from SRV DNS record
     ec2 = boto_client('ec2', region)
-    instances = list_instances(ec2, cluster_name)
+    instances = list_instances(ec2, cluster_name, filters)
     show_instances(instances)
 
 
 @cli.group()
-@click.option('--cluster-name', type=str, required=True)
 @click.option('--region', type=str, required=True)
 @click.option('--odd-host', '-O', type=str, required=True)
+@click.option('--cluster-name', type=str, required=True)
+@click.option('--filters', type=str, default="[]", callback=validate_filters,
+              required=False, help=filters_help)
 @click.option('--piu', type=str, help="Run piu first with this parameter as reason.")
 @click.option('--echo', is_flag=True, help="Print the ssh command before running it.")
 @click.option('--no-prompt', is_flag=True, help="Don't prompt before running the ssh command.")
