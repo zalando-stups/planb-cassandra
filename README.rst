@@ -19,7 +19,7 @@ Features:
 
 Non-Features:
 
-* dynamic cluster sizing - please see `STUPS Cassandra`_ if you need a dynamic Cassandra cluster setup
+* dynamic cluster sizing
 
 
 Prerequisites
@@ -566,7 +566,6 @@ data that the node is no longer responsible for.
 .. _EC2MultiRegionAddressTranslator: https://datastax.github.io/java-driver/manual/address_resolution/#ec2-multi-region
 .. _EC2 Auto Recovery: https://aws.amazon.com/blogs/aws/new-auto-recovery-for-amazon-ec2/
 .. _Jolokia: https://jolokia.org/
-.. _STUPS Cassandra: https://github.com/zalando/stups-cassandra
 .. _Più: http://docs.stups.io/en/latest/components/piu.html
 
 Upgrade your cluster from Cassandra 2.1 -> 3.0.x
