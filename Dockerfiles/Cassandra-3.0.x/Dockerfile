@@ -12,7 +12,7 @@ RUN apt-get -y update && apt-get -y -o Dpkg::Options::='--force-confold' --fix-m
 RUN apt-get -y install apt-utils gnupg
 
 RUN echo "deb http://www.apache.org/dist/cassandra/debian 30x main" | tee -a /etc/apt/sources.list.d/apache.cassandra.list
-RUN curl https://www.apache.org/dist/cassandra/KEYS | apt-key add -
+RUN curl -fsS https://downloads.apache.org/cassandra/KEYS | apt-key add -
 RUN apt-get -y update
 
 RUN apt-get -y install vim less sysstat \
