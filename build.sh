@@ -27,8 +27,8 @@ function build_docker() {
 }
 
 # to contain the side-effect of cd inside the function, make it look like Lisp:
-(build_docker	4	4.0~alpha1	4)
-(build_docker	3	3.11.4		3)
-(build_docker	3.0.x	3.0.18		3.0)
-(build_docker	2.2	2.2.14		2.2)
-(build_docker	2	2.1.21		2)
+(build_docker	4	4.0~beta2	4)
+(build_docker	3	3.11.8		3)
+(build_docker	3.0.x	3.0.22		3.0)
+(build_docker	2.2	2.2.18		2.2)
+(build_docker	2	2.1.22		2)
