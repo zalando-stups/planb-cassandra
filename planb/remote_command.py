@@ -19,10 +19,11 @@ def run_on_instance(
         piu_cmd = ['piu', 'request-access', '--odd-host', odd_host, ip, piu]
         subprocess.check_call(piu_cmd)
 
-    inner_ssh_cmd = 'ssh -o StrictHostKeyChecking=no {} {}'.format(
-        ip, quoted(' '.join(command))
+    outer_ssh_cmd = 'ssh -o StrictHostKeyChecking=no -J odd@{} ubuntu@{} {}'.format(
+        odd_host,
+        ip,
+        quoted(' '.join(command))
     )
-    outer_ssh_cmd = 'ssh -tA {} {}'.format(odd_host, quoted(inner_ssh_cmd))
     if echo:
         print("-"*len(outer_ssh_cmd))
         print(outer_ssh_cmd)

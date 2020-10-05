@@ -228,10 +228,10 @@ def nodes(region: str, cluster_name: str, filters: list):
 @cli.group()
 @click.option('--region', type=str, required=True)
 @click.option('--odd-host', '-O', type=str, required=True)
+@click.option('--piu', type=str, required=True, help="Run piu first with this parameter as reason.")
 @click.option('--cluster-name', type=str, required=True)
 @click.option('--filters', type=str, default="[]", callback=validate_filters,
               required=False, help=filters_help)
-@click.option('--piu', type=str, help="Run piu first with this parameter as reason.")
 @click.option('--echo', is_flag=True, help="Print the ssh command before running it.")
 @click.option('--no-prompt', is_flag=True, help="Don't prompt before running the ssh command.")
 @click.option('--no-wait', is_flag=True, help="Don't wait for the ssh command to exit.")
